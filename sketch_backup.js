@@ -1,5 +1,5 @@
 // UI State
-let currentScreen = "menu"; // 'menu', 'generating', 'result'
+let currentScreen = 'menu'; // 'menu', 'generating', 'result'
 let generatedMap = null;
 
 // Generation parameters
@@ -8,7 +8,7 @@ let params = {
     hexRingCount: 10,
     randomSeed: 0,
     relaxationIterations: 500,
-    relaxationStrength: 0.08,
+    relaxationStrength: 0.08
 };
 
 // UI elements
@@ -16,8 +16,6 @@ let inputFields = {};
 let buttons = {};
 
 // Map data
-let hexGridDiameter = 40;
-let hexRingCount = 10;
 let vertices = [];
 let edges = [];
 let faces = [];
@@ -36,355 +34,110 @@ function setup() {
 
 function setupUI() {
     // Generate button
-    buttons.generate = createButton("Generate Map");
+    buttons.generate = createButton('Generate Map');
     buttons.generate.position(300, 250);
     buttons.generate.mousePressed(startGeneration);
-
+    
     // Load button
-    buttons.load = createButton("Load Map");
+    buttons.load = createButton('Load Map');
     buttons.load.position(300, 290);
     buttons.load.mousePressed(loadMap);
-
+    
     // Save button
-    buttons.save = createButton("Save Map");
+    buttons.save = createButton('Save Map');
     buttons.save.position(300, 500);
     buttons.save.mousePressed(saveMap);
     buttons.save.hide();
-
+    
     // Export Image button
-    buttons.exportImg = createButton("Export Image");
+    buttons.exportImg = createButton('Export Image');
     buttons.exportImg.position(450, 500);
     buttons.exportImg.mousePressed(exportImage);
     buttons.exportImg.hide();
-
+    
     // Back to Menu button
-    buttons.backMenu = createButton("Back to Menu");
+    buttons.backMenu = createButton('Back to Menu');
     buttons.backMenu.position(600, 500);
     buttons.backMenu.mousePressed(showMenu);
     buttons.backMenu.hide();
-
+    
     // Input fields
-    inputFields.hexGridDiameter = createInput(
-        params.hexGridDiameter.toString()
-    );
+    inputFields.hexGridDiameter = createInput(params.hexGridDiameter.toString());
     inputFields.hexGridDiameter.position(400, 350);
     inputFields.hexGridDiameter.size(100);
-
+    
     inputFields.hexRingCount = createInput(params.hexRingCount.toString());
     inputFields.hexRingCount.position(400, 385);
     inputFields.hexRingCount.size(100);
-
+    
     inputFields.randomSeed = createInput(params.randomSeed.toString());
     inputFields.randomSeed.position(400, 420);
     inputFields.randomSeed.size(100);
-
-    inputFields.relaxationIterations = createInput(
-        params.relaxationIterations.toString()
-    );
+    
+    inputFields.relaxationIterations = createInput(params.relaxationIterations.toString());
     inputFields.relaxationIterations.position(400, 455);
     inputFields.relaxationIterations.size(100);
-
-    inputFields.relaxationStrength = createInput(
-        params.relaxationStrength.toString()
-    );
+    
+    inputFields.relaxationStrength = createInput(params.relaxationStrength.toString());
     inputFields.relaxationStrength.position(400, 490);
     inputFields.relaxationStrength.size(100);
 }
-function draw() {
-    if (currentScreen === "menu") {
-        drawMenu();
-    } else if (currentScreen === "generating") {
-        // Generation happens automatically, no draw loop needed
-    } else if (currentScreen === "result") {
-        drawResult();
-    }
-}
-
-function drawMenu() {
-    background(220);
-    textSize(32);
-    textAlign(CENTER);
-    fill(0);
-    text("Quadrangulized Map Generator", width / 2, 100);
-
-    textSize(16);
-    textAlign(LEFT);
-    text("Hex Grid Diameter:", 250, 368);
-    text("Hex Ring Count:", 250, 403);
-    text("Random Seed:", 250, 438);
-    text("Relaxation Iterations:", 250, 473);
-    text("Relaxation Strength:", 250, 508);
-
-    textSize(14);
-    textAlign(CENTER);
-    fill(100);
-    text(
-        "Generate a new quadrangulated mesh or load an existing one",
-        width / 2,
-        180
-    );
-}
-
-function drawResult() {
-    background(220);
-
-    // Draw the generated map
-    faces.forEach((face) => {
-        face.draw();
-    });
-
-    // Show statistics
-    fill(0);
-    noStroke();
-    textSize(14);
-    textAlign(LEFT);
-
-    // Calculate area statistics
-    let areas = faces.map((f) => f.area);
-    let minArea = Math.min(...areas);
-    let maxArea = Math.max(...areas);
-    let areaStdDev = calculateStdDev(areas);
-    let areaVariation = ((areaStdDev / averageFaceArea) * 100).toFixed(1);
-
-    text(`Total Quads: ${faces.length}`, 10, 20);
-    text(`Total Vertices: ${vertices.length}`, 10, 40);
-    text(`Average Area: ${averageFaceArea.toFixed(2)}`, 10, 60);
-    text(`Min/Max Area: ${minArea.toFixed(2)} / ${maxArea.toFixed(2)}`, 10, 80);
-    text(`Area Variation: ${areaVariation}%`, 10, 100);
-}
-
-function calculateStdDev(values) {
-    let avg = values.reduce((a, b) => a + b, 0) / values.length;
-    let squareDiffs = values.map((value) => Math.pow(value - avg, 2));
-    let avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / values.length;
-    return Math.sqrt(avgSquareDiff);
-}
-
-function showMenu() {
-    currentScreen = "menu";
-    buttons.generate.show();
-    buttons.load.show();
-    buttons.save.hide();
-    buttons.exportImg.hide();
-    buttons.backMenu.hide();
-
-    Object.values(inputFields).forEach((field) => field.show());
-}
-
-function showResult() {
-    currentScreen = "result";
-    buttons.generate.hide();
-    buttons.load.hide();
-    buttons.save.show();
-    buttons.exportImg.show();
-    buttons.backMenu.show();
-
-    Object.values(inputFields).forEach((field) => field.hide());
-}
-
-function startGeneration() {
-    // Read parameters from input fields
-    params.hexGridDiameter = parseFloat(inputFields.hexGridDiameter.value());
-    params.hexRingCount = parseInt(inputFields.hexRingCount.value());
-    params.randomSeed = parseInt(inputFields.randomSeed.value());
-    params.relaxationIterations = parseInt(
-        inputFields.relaxationIterations.value()
-    );
-    params.relaxationStrength = parseFloat(
-        inputFields.relaxationStrength.value()
-    );
-
-    // Set global variables
-    hexGridDiameter = params.hexGridDiameter;
-    hexRingCount = params.hexRingCount;
-
-    currentScreen = "generating";
-    background(220);
-    fill(0);
-    textSize(24);
-    textAlign(CENTER);
-    text("Generating map...", width / 2, height / 2);
-
-    // Generate map after a short delay to show message
-    setTimeout(() => {
-        generateMap();
-        showResult();
-    }, 100);
-}
-
-function generateMap() {
-    // Reset data structures
-    vertices = [];
-    faces = [];
-    mergedFaces = [];
-    subdivVertices = [];
-    faceCenterVertices = [];
-    edgeMidpointMap = new Map();
-
-    randomSeed(params.randomSeed);
-
-    // Create initial hexagonal grid
-    const centralPoint = new Vertex(0, 0, 0);
-    vertices.push(centralPoint);
+    //i: hexagon ring count
+    //j: hexagon sector count
+    //k: index in a hexagon sector
 
     for (let i = 1; i <= hexRingCount; i++) {
         for (let j = 0; j < 6; j++) {
             for (let k = 0; k < i; k++) {
+                //k lerps between 0, i-1
                 const p = new Vertex(i, j, k);
                 vertices.push(p);
+                fill(255, 255, 0);
             }
         }
     }
-
     createFaces();
     mergeTrianglesToQuadsRandomly();
     subdivideMesh();
+    showInitialGraph();
     vertices = vertices.concat(subdivVertices);
-    precalculateAdjacentFaces();
+    precalculateAdjacentFaces(); // Add faces to the vertice's lists of adjacent faces for later centroid calculation
     averageFaceArea = calculateAverageArea(faces);
-
-    // Perform relaxation iterations
-    for (let iter = 0; iter < params.relaxationIterations; iter++) {
-        // Recalculate face areas every iteration (critical for area-weighted relaxation!)
-        faces.forEach((face) => {
-            calculateFaceArea(face);
-        });
-
-        shuffleArray(vertices);
-
-        // Apply relaxation using area-weighted centroids
-        vertices.forEach((vertex) => {
-            relaxVertexPosition(vertex, params.relaxationStrength);
-        });
-    } // Build the final map data structure
-    generatedMap = buildMapData();
-}
-
-function buildMapData() {
-    let mapData = {
-        params: params,
-        tiles: [],
-    };
-
-    // Create a map of vertex to index
-    let vertexIndexMap = new Map();
-    let allVertices = vertices;
-    allVertices.forEach((v, idx) => {
-        vertexIndexMap.set(v, idx);
-    });
-
-    // Build tile data
-    faces.forEach((face, faceIdx) => {
-        let tile = {
-            id: faceIdx,
-            vertices: face.vertices.map((v) => ({
-                x: v.x,
-                y: v.y,
-                index: vertexIndexMap.get(v),
-            })),
-            center: getFaceCentroid(face),
-            neighbors: [],
-            area: calculateFaceArea(face),
-        };
-
-        mapData.tiles.push(tile);
-    });
-
-    // Find neighbors (faces that share edges)
-    for (let i = 0; i < faces.length; i++) {
-        for (let j = i + 1; j < faces.length; j++) {
-            let sharedVertices = faces[i].vertices.filter((v) =>
-                faces[j].vertices.includes(v)
-            );
-            if (sharedVertices.length >= 2) {
-                mapData.tiles[i].neighbors.push(j);
-                mapData.tiles[j].neighbors.push(i);
-            }
-        }
-    }
-
-    return mapData;
-}
-
-function saveMap() {
-    if (!generatedMap) return;
-
-    let filename = `quadmap_seed${params.randomSeed}_ring${
-        params.hexRingCount
-    }_${Date.now()}.json`;
-    saveJSON(generatedMap, filename);
-
-    // Show notification
-    alert(
-        `Map saved to Downloads folder as:\n${filename}\n\nTo save to project:\nMove the file to the 'results' folder in your project directory.`
-    );
-    console.log("Map saved to Downloads:", filename);
-}
-
-function loadMap() {
-    // Create file input element
-    let input = createFileInput(handleFile);
-    input.position(0, -100); // Hide it off-screen
-    input.elt.click(); // Trigger file dialog
-
-    function handleFile(file) {
-        if (file.type === "application" && file.subtype === "json") {
-            loadJSON(file.data, (data) => {
-                generatedMap = data;
-                reconstructMapFromData(data);
-                showResult();
-            });
-        } else {
-            console.error("Please load a JSON file");
-        }
-        input.remove();
+    // console.log("Average face area:", averageFaceArea);
+    // averageEdgeLength = calculateAverageEdgeLength();
+    // console.log("Average edge length:", averageEdgeLength);
+    if (recording) {
+        saveCanvas("frame_0", "png");
     }
 }
 
-function reconstructMapFromData(mapData) {
-    // Reset structures
-    vertices = [];
-    faces = [];
-    subdivVertices = [];
-
-    // Restore parameters
-    params = mapData.params;
-    hexGridDiameter = params.hexGridDiameter;
-    hexRingCount = params.hexRingCount;
-
-    // Rebuild vertices from tile data
-    let vertexMap = new Map();
-
-    mapData.tiles.forEach((tile) => {
-        tile.vertices.forEach((vertexData) => {
-            if (!vertexMap.has(vertexData.index)) {
-                let v = new SubdivVertex(vertexData.x, vertexData.y);
-                vertexMap.set(vertexData.index, v);
-                vertices.push(v);
-            }
-        });
+function draw() {
+    // noLoop();
+    background(220, 30); // Clear the canvas
+    faces.forEach((face) => {
+        //calculate area
+        const area = calculateFaceArea(face);
+        face.draw();
     });
 
-    // Rebuild faces
-    mapData.tiles.forEach((tile) => {
-        let faceVertices = tile.vertices.map((vData) =>
-            vertexMap.get(vData.index)
-        );
-        let face = new Face(faceVertices);
-        faces.push(face);
-    });
+    // frameRate(6);
+    // shuffleArray(faces); // Randomize the order of face processing on each frame
+    shuffleArray(vertices); // Randomize the order of vertex processing on each frame
+    // Relax the vertices slightly on each frame
+    // relaxVerticesUsingWeightedCentroids(vertices, faces, 0.001);
+    vertices
+        // .concat(subdivVertices)
+        .forEach((vertex) => relaxVertexPosition(vertex, 0.08));
 
-    precalculateAdjacentFaces();
-    averageFaceArea = calculateAverageArea(faces);
-}
-
-function exportImage() {
-    let filename = `quadmap_seed${params.randomSeed}_ring${params.hexRingCount}`;
-    saveCanvas(filename, "png");
-    alert(
-        `Image saved to Downloads folder as:\n${filename}.png\n\nTo save to project:\nMove the file to the 'results' folder in your project directory.`
-    );
-    console.log("Image exported:", filename + ".png");
+    // relaxVerticesForArea(1, averageFaceArea, vertices, faces);
+    // Redraw the mesh to visualize the current state
+    // drawMesh();
+    if (recording) {
+        saveCanvas("frame_" + frameCount, "png");
+    }
+    if (frameCount > 500) {
+        noLoop();
+    }
 }
 
 function createFaces() {
@@ -409,6 +162,7 @@ function createFaces() {
                             k % (i - 1)
                         )
                     ];
+                // console.log(i - 1, (j + floor(k / (i - 1))) % 6, k % i);
                 const p1 = vertices[getVertexIndex(i, j, k)];
                 const p2 =
                     vertices[
@@ -419,6 +173,8 @@ function createFaces() {
                         )
                     ];
 
+                // console.log(i, j, k);
+                // console.log(p0, p1, p2);
                 faces.push(new Face([p0, p1, p2]));
                 if (i < hexRingCount) {
                     const p3 =
@@ -471,6 +227,7 @@ function mergeTrianglesToQuadsRandomly() {
 
             mergedFacesTemp.push(new Face(orderedVertices));
             toRemove.add(i).add(j);
+            // Once a merge is made, you might choose to continue to try merging others or break, depending on desired randomness
         }
     }
 
@@ -541,6 +298,11 @@ function drawMesh() {
         endShape(CLOSE);
         noStroke();
         fill(0, 50, 50);
+        // text(
+        //     round(face.area / averageFaceArea, 2),
+        //     getFaceCentroid(face).x - 5,
+        //     getFaceCentroid(face).y
+        // );
     });
 
     // Draw vertices
@@ -595,20 +357,13 @@ function precalculateAdjacentFaces() {
 
     faces.forEach((face) => {
         face.vertices.forEach((vertex) => {
-            if (vertex.adjacentFaces) {
-                vertex.adjacentFaces.push(face); // Add this face to the vertex's list of adjacent faces
-            }
+            vertex.adjacentFaces.push(face); // Add this face to the vertex's list of adjacent faces
         });
     });
 }
 
 function relaxVertexPosition(vertex, strength = 0.1) {
-    if (
-        vertex.edgy ||
-        !vertex.adjacentFaces ||
-        vertex.adjacentFaces.length === 0
-    )
-        return;
+    if (vertex.edgy || vertex.adjacentFaces.length === 0) return; // Skip if edgy or has no adjacent faces
 
     let weightedSumX = 0;
     let weightedSumY = 0;
@@ -616,8 +371,8 @@ function relaxVertexPosition(vertex, strength = 0.1) {
 
     // Calculate the weighted centroid based on the area of adjacent faces
     vertex.adjacentFaces.forEach((face) => {
-        let centroid = getFaceCentroid(face);
-        let weight = face.area;
+        let centroid = getFaceCentroid(face); // Assuming this returns the centroid of the face
+        let weight = face.area; // Assuming each face has an 'area' property
 
         weightedSumX += centroid.x * weight;
         weightedSumY += centroid.y * weight;
