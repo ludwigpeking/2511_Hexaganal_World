@@ -75,7 +75,7 @@
         </div>
 
         <div id="canvas-container">
-            <canvas id="mapCanvas" width="800" height="800"></canvas>
+            <canvas id="mapCanvas" width="1200" height="1200"></canvas>
         </div>
 
         <div id="info">
@@ -119,6 +119,11 @@
                 ctx.fillStyle = "#f5f5f5";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+                // Scale coordinates from 800x800 to current canvas size
+                const scale = canvas.width / 800;
+                ctx.save();
+                ctx.scale(scale, scale);
+
                 // First, highlight neighbors if a tile is selected
                 if (selectedTile !== null) {
                     const tile = mapData.tiles[selectedTile];
@@ -135,6 +140,8 @@
                 mapData.tiles.forEach((tile, idx) => {
                     drawTile(tile, idx === selectedTile);
                 });
+
+                ctx.restore();
             }
 
             function drawTileHighlight(tile, color, lineWidth) {
@@ -275,10 +282,15 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
 
+                // Scale click coordinates back to original 800x800 coordinate system
+                const scale = 800 / canvas.width;
+                const scaledX = x * scale;
+                const scaledY = y * scale;
+
                 // Find clicked tile
                 for (let i = 0; i < mapData.tiles.length; i++) {
                     const tile = mapData.tiles[i];
-                    if (isPointInTile(x, y, tile)) {
+                    if (isPointInTile(scaledX, scaledY, tile)) {
                         selectedTile = i;
                         displayMap();
 
