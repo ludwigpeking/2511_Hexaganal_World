@@ -33,7 +33,7 @@ For detailed instructions, see **[QUICK_START.md](QUICK_START.md)**
 
 ### Generate Your First Map
 
-Open `index.html` and click "Generate Map" with default settings.
+Open `quadrangulizedMapGenerator.html` and click "Generate Map" with default settings.
 
 ### View Existing Maps
 
@@ -51,7 +51,7 @@ Open `viewer.html` to load and analyze saved JSON maps.
 
 ## 📦 Map Data Structure
 
-Generated maps contain complete topology information:
+Generated maps contain complete topology information including vertex neighbor relationships:
 
 ```json
 {
@@ -64,9 +64,27 @@ Generated maps contain complete topology information:
       "neighbors": [1, 2, 5],
       "area": 325.5
     }
+  ],
+  "vertices": [
+    {
+      "x": 400,
+      "y": 300,
+      "index": 0,
+      "neighbors": [1, 2, 3, 4],
+      "adjacentFaces": [0, 1, 2]
+    }
   ]
 }
 ```
+
+### Vertex Information
+
+Each vertex includes:
+
+-   **Position** (`x`, `y`): Coordinates in the map
+-   **Index**: Unique identifier
+-   **Neighbors**: Indices of connected vertices (sharing an edge)
+-   **Adjacent Faces**: Indices of tiles this vertex belongs to
 
 ## 💡 Use Cases
 

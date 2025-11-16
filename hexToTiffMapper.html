@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Hex Map to GeoTIFF Mapper</title>
+        <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist-browser/geotiff.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f0f0f0;
+            }
+            h1 {
+                color: #333;
+            }
+            #controls {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                background: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            button:hover {
+                background: #45a049;
+            }
+            #canvas-container {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                display: inline-block;
+            }
+            canvas {
+                border: 1px solid #ddd;
+            }
+            #info {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-top: 20px;
+                font-size: 14px;
+                max-width: 800px;
+            }
+            .stat-row {
+                margin: 5px 0;
+            }
+            .stat-label {
+                font-weight: bold;
+                display: inline-block;
+                width: 200px;
+            }
+            #progress {
+                margin-top: 10px;
+                color: #666;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🗺️ Hexagonal Map to GeoTIFF Mapper</h1>
+
+        <div id="controls">
+            <button onclick="loadAndMap()">Load & Map Data</button>
+            <button onclick="exportResults()">Export Results JSON</button>
+            <button onclick="visualizeMapping()">Visualize Mapping</button>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="mapCanvas" width="1200" height="1200"></canvas>
+        </div>
+
+        <div id="info">
+            <h3>Mapping Information</h3>
+            <div id="stats">Click "Load & Map Data" to begin...</div>
+            <div id="progress"></div>
+        </div>
+
+        <script>
+            let hexMapData = null;
+            let tiffData = null;
+            let tiffImage = null;
+            let mappedVertices = [];
+            let canvas = document.getElementById("mapCanvas");
+            let ctx = canvas.getContext("2d");
+
+            // Coordinate mapping parameters
+            let mapping = {
+                hexCenter: { x: 0, y: 0 },
+                hexBounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
+                hexWidth: 0,
+                hexHeight: 0,
+                tiffWidth: 0,
+                tiffHeight: 0,
+                scale: 1,
+                offsetX: 0,
+                offsetY: 0,
+            };
+
+            async function loadAndMap() {
+                updateProgress("Loading hexagonal map...");
+
+                try {
+                    // Load hexagonal map JSON
+                    const hexResponse = await fetch("results/map_1.json");
+                    hexMapData = await hexResponse.json();
+
+                    updateProgress("Loading GeoTIFF...");
+
+                    // Load GeoTIFF
+                    const tiffResponse = await fetch("map/rome/output_hh.tif");
+                    const arrayBuffer = await tiffResponse.arrayBuffer();
+                    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+                    tiffImage = await tiff.getImage();
+                    tiffData = await tiffImage.readRasters();
+
+                    updateProgress("Calculating coordinate mapping...");
+
+                    // Calculate hex bounds and center
+                    calculateHexBounds();
+
+                    // Calculate mapping parameters
+                    calculateMapping();
+
+                    updateProgress("Interpolating vertex elevations...");
+
+                    // Map all vertices to TIFF and interpolate
+                    mapVertices();
+
+                    updateProgress("Mapping complete!");
+                    displayStats();
+                } catch (error) {
+                    updateProgress("Error: " + error.message);
+                    console.error(error);
+                }
+            }
+
+            function calculateHexBounds() {
+                // Find bounding box of all vertices
+                let minX = Infinity,
+                    maxX = -Infinity;
+                let minY = Infinity,
+                    maxY = -Infinity;
+
+                hexMapData.vertices.forEach((v) => {
+                    minX = Math.min(minX, v.x);
+                    maxX = Math.max(maxX, v.x);
+                    minY = Math.min(minY, v.y);
+                    maxY = Math.max(maxY, v.y);
+                });
+
+                mapping.hexBounds = { minX, maxX, minY, maxY };
+                mapping.hexWidth = maxX - minX;
+                mapping.hexHeight = maxY - minY;
+                mapping.hexCenter = {
+                    x: (minX + maxX) / 2,
+                    y: (minY + maxY) / 2,
+                };
+            }
+
+            function calculateMapping() {
+                // Get TIFF dimensions
+                mapping.tiffWidth = tiffImage.getWidth();
+                mapping.tiffHeight = tiffImage.getHeight();
+
+                // Calculate scale to fit hex into TIFF (maximized but fully contained)
+                const scaleX = mapping.tiffWidth / mapping.hexWidth;
+                const scaleY = mapping.tiffHeight / mapping.hexHeight;
+                mapping.scale = Math.min(scaleX, scaleY);
+
+                // Calculate offset to center the hex in TIFF
+                const scaledHexWidth = mapping.hexWidth * mapping.scale;
+                const scaledHexHeight = mapping.hexHeight * mapping.scale;
+                mapping.offsetX = (mapping.tiffWidth - scaledHexWidth) / 2;
+                mapping.offsetY = (mapping.tiffHeight - scaledHexHeight) / 2;
+            }
+
+            function hexToTiff(hexX, hexY) {
+                // Transform hex coordinates to TIFF pixel coordinates
+                const relX = hexX - mapping.hexBounds.minX;
+                const relY = hexY - mapping.hexBounds.minY;
+
+                const tiffX = relX * mapping.scale + mapping.offsetX;
+                const tiffY = relY * mapping.scale + mapping.offsetY;
+
+                return { x: tiffX, y: tiffY };
+            }
+
+            function interpolateElevation(tiffX, tiffY) {
+                // Clamp to TIFF bounds
+                tiffX = Math.max(0, Math.min(mapping.tiffWidth - 1, tiffX));
+                tiffY = Math.max(0, Math.min(mapping.tiffHeight - 1, tiffY));
+
+                // Get integer pixel coordinates
+                const x0 = Math.floor(tiffX);
+                const y0 = Math.floor(tiffY);
+                const x1 = Math.min(x0 + 1, mapping.tiffWidth - 1);
+                const y1 = Math.min(y0 + 1, mapping.tiffHeight - 1);
+
+                // Get fractional parts
+                const fx = tiffX - x0;
+                const fy = tiffY - y0;
+
+                // Get elevation values at the four corners of the pixel
+                const e00 = getPixelValue(x0, y0);
+                const e10 = getPixelValue(x1, y0);
+                const e01 = getPixelValue(x0, y1);
+                const e11 = getPixelValue(x1, y1);
+
+                // Bilinear interpolation by splitting into two triangles
+                let elevation;
+                if (fx + fy < 1) {
+                    // Lower-left triangle (0,0) - (1,0) - (0,1)
+                    const w0 = 1 - fx - fy;
+                    const w1 = fx;
+                    const w2 = fy;
+                    elevation = w0 * e00 + w1 * e10 + w2 * e01;
+                } else {
+                    // Upper-right triangle (1,0) - (1,1) - (0,1)
+                    const w0 = fx + fy - 1;
+                    const w1 = 1 - fy;
+                    const w2 = 1 - fx;
+                    elevation = w0 * e11 + w1 * e10 + w2 * e01;
+                }
+
+                return elevation;
+            }
+
+            function getPixelValue(x, y) {
+                // Get pixel value from TIFF raster data
+                const index = y * mapping.tiffWidth + x;
+                return tiffData[0][index]; // Assuming single band
+            }
+
+            function mapVertices() {
+                mappedVertices = [];
+
+                hexMapData.vertices.forEach((vertex, idx) => {
+                    // Transform to TIFF coordinates
+                    const tiffCoords = hexToTiff(vertex.x, vertex.y);
+
+                    // Interpolate elevation
+                    const elevation = interpolateElevation(
+                        tiffCoords.x,
+                        tiffCoords.y
+                    );
+
+                    mappedVertices.push({
+                        index: vertex.index,
+                        hexCoords: { x: vertex.x, y: vertex.y },
+                        tiffCoords: tiffCoords,
+                        elevation: elevation,
+                        neighbors: vertex.neighbors,
+                        adjacentFaces: vertex.adjacentFaces,
+                    });
+
+                    // Update progress every 100 vertices
+                    if (idx % 100 === 0) {
+                        updateProgress(
+                            `Mapped ${idx}/${hexMapData.vertices.length} vertices...`
+                        );
+                    }
+                });
+            }
+
+            function displayStats() {
+                const elevations = mappedVertices.map((v) => v.elevation);
+                const minElev = Math.min(...elevations);
+                const maxElev = Math.max(...elevations);
+                const avgElev =
+                    elevations.reduce((a, b) => a + b, 0) / elevations.length;
+
+                const stats = `
+                <div class="stat-row">
+                    <span class="stat-label">Hex Map Vertices:</span>
+                    <span>${hexMapData.vertices.length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Hex Map Tiles:</span>
+                    <span>${hexMapData.tiles.length}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Hex Bounds:</span>
+                    <span>${mapping.hexWidth.toFixed(
+                        1
+                    )} × ${mapping.hexHeight.toFixed(1)}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">TIFF Dimensions:</span>
+                    <span>${mapping.tiffWidth} × ${
+                    mapping.tiffHeight
+                } pixels</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Scale Factor:</span>
+                    <span>${mapping.scale.toFixed(4)}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Min Elevation:</span>
+                    <span>${minElev.toFixed(2)}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Max Elevation:</span>
+                    <span>${maxElev.toFixed(2)}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Avg Elevation:</span>
+                    <span>${avgElev.toFixed(2)}</span>
+                </div>
+            `;
+
+                document.getElementById("stats").innerHTML = stats;
+            }
+
+            function updateProgress(message) {
+                document.getElementById("progress").innerHTML = message;
+            }
+
+            function exportResults() {
+                if (!mappedVertices.length) {
+                    alert("Please load and map data first!");
+                    return;
+                }
+
+                const result = {
+                    hexMapParams: hexMapData.params,
+                    mapping: mapping,
+                    vertices: mappedVertices,
+                    tiles: hexMapData.tiles.map((tile) => ({
+                        id: tile.id,
+                        vertexIndices: tile.vertices.map((v) => v.index),
+                        neighbors: tile.neighbors,
+                        center: tile.center,
+                        area: tile.area,
+                    })),
+                };
+
+                const blob = new Blob([JSON.stringify(result, null, 2)], {
+                    type: "application/json",
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `hex_to_tiff_mapping_${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                alert("Mapping exported successfully!");
+            }
+
+            function visualizeMapping() {
+                if (!mappedVertices.length) {
+                    alert("Please load and map data first!");
+                    return;
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw background
+                ctx.fillStyle = "#f5f5f5";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Calculate scale to fit visualization
+                const vizScale = Math.min(
+                    canvas.width / mapping.hexWidth,
+                    canvas.height / mapping.hexHeight
+                );
+
+                // Get elevation range for coloring
+                const elevations = mappedVertices.map((v) => v.elevation);
+                const minElev = Math.min(...elevations);
+                const maxElev = Math.max(...elevations);
+                const elevRange = maxElev - minElev;
+
+                // Draw tiles with elevation coloring
+                hexMapData.tiles.forEach((tile) => {
+                    ctx.beginPath();
+
+                    tile.vertices.forEach((v, i) => {
+                        const screenX =
+                            (v.x - mapping.hexBounds.minX) * vizScale;
+                        const screenY =
+                            (v.y - mapping.hexBounds.minY) * vizScale;
+
+                        if (i === 0) {
+                            ctx.moveTo(screenX, screenY);
+                        } else {
+                            ctx.lineTo(screenX, screenY);
+                        }
+                    });
+
+                    ctx.closePath();
+
+                    // Color based on average elevation of tile vertices
+                    const tileElevations = tile.vertices.map((v) => {
+                        const mapped = mappedVertices.find(
+                            (mv) => mv.index === v.index
+                        );
+                        return mapped ? mapped.elevation : 0;
+                    });
+                    const avgTileElev =
+                        tileElevations.reduce((a, b) => a + b, 0) /
+                        tileElevations.length;
+                    const normalizedElev = (avgTileElev - minElev) / elevRange;
+
+                    // Color gradient from blue (low) to green to red (high)
+                    const hue = (1 - normalizedElev) * 240; // 240 = blue, 0 = red
+                    ctx.fillStyle = `hsl(${hue}, 70%, 60%)`;
+                    ctx.fill();
+
+                    ctx.strokeStyle = "#333";
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                });
+
+                updateProgress("Visualization complete!");
+            }
+
+            // Initial message
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "#666";
+            ctx.textAlign = "center";
+            ctx.fillText(
+                "Click 'Load & Map Data' to begin",
+                canvas.width / 2,
+                canvas.height / 2
+            );
+        </script>
+    </body>
+</html>

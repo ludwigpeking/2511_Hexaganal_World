@@ -1,0 +1,42 @@
+<canvas id="elevCanvas"></canvas>
+<script src="https://unpkg.com/geotiff/dist-browser/geotiff.js"></script>
+<script>
+async function run() {
+  const tiff = await GeoTIFF.fromUrl("rome/output_hh.tif");
+  const img = await tiff.getImage();
+  const raster = await img.readRasters();
+  console.log(raster);
+
+  const width = img.getWidth();
+  const height = img.getHeight();
+  const data = raster[0]; // elevation array
+
+  const canvas = document.getElementById("elevCanvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  const imageData = ctx.createImageData(width, height);
+
+  // find min/max elevation to scale color
+  let min = Infinity, max = -Infinity;
+  for (let v of data) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+
+  // put pixels
+  for (let i = 0; i < data.length; i++) {
+    const elevation = data[i];
+    const norm = (elevation - min) / (max - min); // 0..1
+    const color = Math.floor(norm * 255);
+
+    imageData.data[i * 4 + 0] = color;  // R
+    imageData.data[i * 4 + 1] = color;  // G
+    imageData.data[i * 4 + 2] = color;  // B
+    imageData.data[i * 4 + 3] = 255;    // A
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+run();
+</script>

@@ -3,6 +3,7 @@
     <head>
         <meta charset="utf-8" />
         <title>Quad Map Viewer</title>
+        <script src="vertexClass.js"></script>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -211,6 +212,12 @@
                     <span>${mapData.tiles.length}</span>
                 </div>
                 <div class="stat-row">
+                    <span class="stat-label">Total Vertices:</span>
+                    <span>${
+                        mapData.vertices ? mapData.vertices.length : "N/A"
+                    }</span>
+                </div>
+                <div class="stat-row">
                     <span class="stat-label">Average Area:</span>
                     <span>${(
                         areas.reduce((a, b) => a + b) / areas.length
@@ -294,7 +301,19 @@
                         selectedTile = i;
                         displayMap();
 
-                        // Show tile info
+                        // Show tile info with vertices
+                        const vertexInfo = tile.vertices
+                            .map((v) => {
+                                const vertexData = mapData.vertices
+                                    ? mapData.vertices[v.index]
+                                    : null;
+                                const neighborCount = vertexData
+                                    ? vertexData.neighbors.length
+                                    : "N/A";
+                                return `<div style="margin-left: 20px;">Vertex ${v.index}: ${neighborCount} neighbors</div>`;
+                            })
+                            .join("");
+
                         const tileInfo = `
                         <h4>Tile ${tile.id} Selected</h4>
                         <div class="stat-row">
@@ -311,6 +330,10 @@
                             <span class="stat-label">Neighbors:</span>
                             <span>${tile.neighbors.join(", ")}</span>
                         </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Vertices:</span>
+                        </div>
+                        ${vertexInfo}
                     `;
 
                         const infoDiv = document.getElementById("info");
