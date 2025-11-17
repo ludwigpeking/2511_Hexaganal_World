@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>World Simulator</title>
+        <link rel="stylesheet" href="style.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script src="marchingSquares.js"></script>
+        <script src="pathfinding.js"></script>
+        <script src="simulation.js"></script>
+        <script src="sketch.js"></script>
+    </head>
+    <body>
+        <h1>🌍 World Simulator</h1>
+
+        <div id="controls">
+            <div>
+                <button id="loadFileBtn">Load Topology File</button>
+                <input type="file" id="fileInput" accept=".json" />
+                <button id="createRouteBtn">Create Random Route</button>
+                <button id="populateBtn">Populate Settlements</button>
+                <button id="runStepBtn">Run Simulation Step</button>
+                <button id="clearRoutesBtn">Clear All Routes</button>
+                <button id="resetSimBtn">Reset Simulation</button>
+            </div>
+
+            <div>
+                <label>Uphill Factor:</label>
+                <input
+                    type="number"
+                    id="uphillFactor"
+                    value="1"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                />
+
+                <label>Downhill Factor:</label>
+                <input
+                    type="number"
+                    id="downhillFactor"
+                    value="0.3"
+                    step="0.1"
+                    min="0"
+                    max="1"
+                />
+
+                <label>Flat Terrain Cost:</label>
+                <input
+                    type="number"
+                    id="flatTerrainCost"
+                    value="2"
+                    step="0.5"
+                    min="0.5"
+                    max="10"
+                />
+                <button id="setTerrainParamsBtn">OK</button>
+
+                <label>Traffic Weight:</label>
+                <input
+                    type="number"
+                    id="trafficWeight"
+                    value="3"
+                    step="1"
+                    min="1"
+                    max="10"
+                />
+
+                <label>Water Level:</label>
+                <input type="number" id="waterLevel" value="14" step="1" />
+                <button id="setWaterLevelBtn">OK</button>
+
+                <label>Mode Change Cost:</label>
+                <input
+                    type="number"
+                    id="modeChangeCost"
+                    value="50"
+                    step="5"
+                    min="0"
+                    max="200"
+                />
+
+                <label>Water Transport Factor:</label>
+                <input
+                    type="number"
+                    id="waterTransportFactor"
+                    value="0.01"
+                    step="0.01"
+                    min="0.001"
+                    max="1"
+                />
+            </div>
+
+            <div>
+                <label>Simulation Speed:</label>
+                <input
+                    type="number"
+                    id="simSpeed"
+                    value="1"
+                    step="1"
+                    min="1"
+                    max="10"
+                />
+
+                <label>
+                    <input type="checkbox" id="autoSimulate" />
+                    Auto-run Simulation
+                </label>
+            </div>
+
+            <div>
+                <label>
+                    <input type="checkbox" id="showElevation" checked />
+                    Show Elevation Colors
+                </label>
+                <label>
+                    <input type="checkbox" id="showVertices" />
+                    Show Vertices
+                </label>
+                <label>
+                    <input type="checkbox" id="showTraffic" checked />
+                    Show Traffic Weights
+                </label>
+            </div>
+
+            <div>
+                <strong>Debug Layers:</strong>
+                <label>
+                    <input type="checkbox" id="showDefense" />
+                    Defense Value
+                </label>
+                <label>
+                    <input type="checkbox" id="showSecurity" />
+                    Security Value
+                </label>
+                <label>
+                    <input type="checkbox" id="showFarmValue" />
+                    Farm Value
+                </label>
+                <label>
+                    <input type="checkbox" id="showFarmerValue" />
+                    Farmer Value
+                </label>
+                <label>
+                    <input type="checkbox" id="showMerchantValue" />
+                    Merchant Value
+                </label>
+            </div>
+
+            <div id="progress">Click "Load Topology File" to begin</div>
+        </div>
+
+        <div id="canvas-container"></div>
+
+        <div id="info">
+            <h3>Instructions</h3>
+            <p>1. Load the topology map</p>
+            <p>
+                2. Click "Create Random Route" to generate a trade route between
+                two random edge vertices
+            </p>
+            <p>
+                3. The pathfinding uses A* with terrain resistance based on
+                slopes and elevation changes
+            </p>
+            <p>
+                4. Click "Run Simulation Step" to evolve the world (future:
+                settlements, resources, etc.)
+            </p>
+            <p>5. Enable "Auto-run Simulation" for continuous evolution</p>
+
+            <h3>Simulation Statistics</h3>
+            <div id="sim-stats">
+                <div>
+                    <span>Simulation Step:</span>
+                    <span id="step-count">0</span>
+                </div>
+            </div>
+
+            <h3>Route Statistics</h3>
+            <div id="route-stats">No routes created yet</div>
+        </div>
+    </body>
+</html>

@@ -13,6 +13,7 @@
  * @param {number} minElev - Minimum elevation in the dataset
  * @param {number} maxElev - Maximum elevation in the dataset
  * @param {number} contourInterval - Elevation interval between contour levels
+ * @param {number} waterLevel - Water level elevation (optional)
  */
 function drawQuadContours(
     ctx,
@@ -20,7 +21,8 @@ function drawQuadContours(
     elevs,
     minElev,
     maxElev,
-    contourInterval
+    contourInterval,
+    waterLevel = -Infinity
 ) {
     // Iterate through contour levels
     for (
@@ -47,16 +49,22 @@ function drawQuadContours(
         // Determine marching squares state
         const state = getMarchingSquaresState(f0, f1, f2, f3);
 
-        // Calculate color based on altitude
-        const normalizedAlt = (altitude - minElev) / (maxElev - minElev);
-        const hue = 200 - normalizedAlt * 150; // Blue to green to yellow
-        const saturation = 50 - normalizedAlt * 20;
-        const lightness = 40 + normalizedAlt * 40;
+        // Use dark blue for water levels, elevation colors for land
+        if (altitude <= waterLevel) {
+            ctx.fillStyle = "#001a33";
+            ctx.strokeStyle = "#002244";
+        } else {
+            // Calculate color based on altitude
+            const normalizedAlt = (altitude - minElev) / (maxElev - minElev);
+            const hue = 200 - normalizedAlt * 150; // Blue to green to yellow
+            const saturation = 50 - normalizedAlt * 20;
+            const lightness = 40 + normalizedAlt * 40;
 
-        ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-        ctx.strokeStyle = `hsl(${hue - 20}, ${saturation + 20}%, ${
-            lightness - 10
-        }%)`;
+            ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            ctx.strokeStyle = `hsl(${hue - 20}, ${saturation + 20}%, ${
+                lightness - 10
+            }%)`;
+        }
         ctx.lineWidth = 0.3;
 
         // Draw based on marching squares state
