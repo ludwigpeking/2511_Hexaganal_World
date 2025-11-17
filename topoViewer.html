@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Topology Map Viewer</title>
+        <script src="marchingSquares.js"></script>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                background: #f0f0f0;
+            }
+            h1 {
+                color: #333;
+            }
+            #controls {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                background: #4caf50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 14px;
+            }
+            button:hover {
+                background: #45a049;
+            }
+            .button-secondary {
+                background: #2196f3;
+            }
+            .button-secondary:hover {
+                background: #0b7dda;
+            }
+            input[type="file"] {
+                margin: 10px 0;
+            }
+            #canvas-container {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                display: inline-block;
+            }
+            canvas {
+                border: 1px solid #ddd;
+                cursor: crosshair;
+            }
+            #info {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-top: 20px;
+                font-size: 14px;
+                max-width: 800px;
+            }
+            .stat-row {
+                margin: 5px 0;
+            }
+            .stat-label {
+                font-weight: bold;
+                display: inline-block;
+                width: 220px;
+            }
+            #vertex-info {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-top: 20px;
+                max-width: 800px;
+            }
+            #legend {
+                background: white;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-top: 20px;
+                max-width: 800px;
+            }
+            #legend-gradient {
+                width: 100%;
+                height: 30px;
+                border-radius: 4px;
+                margin: 10px 0;
+            }
+            .legend-labels {
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                color: #666;
+            }
+            .neighbor-info {
+                margin: 5px 0;
+                padding: 5px;
+                background: #f5f5f5;
+                border-radius: 3px;
+                font-size: 12px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🗺️ Topology Map Viewer</h1>
+
+        <div id="controls">
+            <div>
+                <button onclick="loadDefaultMap()">Load topo_2.json</button>
+                <button
+                    class="button-secondary"
+                    onclick="document.getElementById('fileInput').click()"
+                >
+                    Load Custom File
+                </button>
+                <input
+                    type="file"
+                    id="fileInput"
+                    accept=".json"
+                    style="display: none"
+                    onchange="loadCustomFile(event)"
+                />
+            </div>
+            <div style="margin-top: 10px">
+                <label>
+                    <input
+                        type="checkbox"
+                        id="showElevation"
+                        checked
+                        onchange="redraw()"
+                    />
+                    Show Elevation Colors
+                </label>
+                <label style="margin-left: 20px">
+                    <input
+                        type="checkbox"
+                        id="showContours"
+                        onchange="redraw()"
+                    />
+                    Show Contours
+                </label>
+                <label style="margin-left: 20px">
+                    <input
+                        type="checkbox"
+                        id="showVertices"
+                        onchange="redraw()"
+                    />
+                    Show Vertices
+                </label>
+            </div>
+            <div id="progress" style="margin-top: 10px; color: #666">
+                Click "Load topo_2.json" to begin
+            </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="mapCanvas" width="2400" height="2400"></canvas>
+        </div>
+
+        <div id="info">
+            <h3>Map Information</h3>
+            <div id="stats">No data loaded</div>
+        </div>
+
+        <div id="legend">
+            <h3>Elevation Legend</h3>
+            <div id="legend-gradient"></div>
+            <div class="legend-labels">
+                <span id="legend-min">-</span>
+                <span id="legend-max">-</span>
+            </div>
+        </div>
+
+        <div id="vertex-info">
+            <h3>Vertex Information</h3>
+            <div id="vertex-details">Click on the map to select a vertex</div>
+        </div>
+
+        <script>
+            let topoData = null;
+            let canvas = document.getElementById("mapCanvas");
+            let ctx = canvas.getContext("2d");
+            let selectedVertexIndex = null;
+            let minElevation = 0;
+            let maxElevation = 0;
+
+            // Canvas click handler
+            canvas.addEventListener("click", (event) => {
+                if (!topoData) return;
+
+                const rect = canvas.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+
+                // Find closest vertex
+                let closestVertex = null;
+                let minDist = Infinity;
+
+                topoData.vertices.forEach((vertex) => {
+                    const vx =
+                        vertex.hexCoords.x * topoData.mapping.hexToCanvasScale;
+                    const vy =
+                        vertex.hexCoords.y * topoData.mapping.hexToCanvasScale;
+                    const dist = Math.sqrt((x - vx) ** 2 + (y - vy) ** 2);
+
+                    if (dist < minDist && dist < 20) {
+                        minDist = dist;
+                        closestVertex = vertex;
+                    }
+                });
+
+                if (closestVertex) {
+                    selectedVertexIndex = closestVertex.index;
+                    displayVertexInfo(closestVertex);
+                    redraw();
+                }
+            });
+
+            async function loadDefaultMap() {
+                updateProgress("Loading topo_2.json...");
+                try {
+                    const response = await fetch("results/topo_2.json");
+                    topoData = await response.json();
+                    processData();
+                } catch (error) {
+                    updateProgress("Error loading file: " + error.message);
+                    console.error(error);
+                }
+            }
+
+            async function loadCustomFile(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                updateProgress("Loading " + file.name + "...");
+                try {
+                    const text = await file.text();
+                    topoData = JSON.parse(text);
+                    processData();
+                } catch (error) {
+                    updateProgress("Error loading file: " + error.message);
+                    console.error(error);
+                }
+            }
+
+            function processData() {
+                updateProgress("Processing topology data...");
+
+                // Find elevation range
+                minElevation = Infinity;
+                maxElevation = -Infinity;
+                topoData.vertices.forEach((vertex) => {
+                    if (vertex.elevation < minElevation)
+                        minElevation = vertex.elevation;
+                    if (vertex.elevation > maxElevation)
+                        maxElevation = vertex.elevation;
+                });
+
+                updateProgress("Rendering map...");
+                updateStats();
+                updateLegend();
+                redraw();
+                updateProgress("Map loaded successfully!");
+            }
+
+            function redraw() {
+                if (!topoData) return;
+
+                // Clear canvas
+                ctx.fillStyle = "#ffffff";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const scale = topoData.mapping.hexToCanvasScale;
+                const showElevation =
+                    document.getElementById("showElevation").checked;
+                const showContours =
+                    document.getElementById("showContours").checked;
+                const showVertices =
+                    document.getElementById("showVertices").checked;
+
+                // Draw tiles first if showing elevation
+                if (showElevation) {
+                    drawTilesWithElevation(scale);
+                }
+
+                // Draw contours if enabled
+                if (showContours) {
+                    drawContours(scale);
+                }
+
+                // Draw tile borders
+                drawTileBorders(scale);
+
+                // Highlight selected vertex and neighbors
+                if (selectedVertexIndex !== null) {
+                    drawSelectedVertex(scale);
+                }
+
+                // Draw vertices if enabled
+                if (showVertices) {
+                    drawVertices(scale);
+                }
+            }
+
+            function drawTilesWithElevation(scale) {
+                // Build vertex index map for quick lookup
+                const vertexMap = new Map();
+                topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
+
+                // Draw each tile with marching squares contours
+                topoData.tiles.forEach((tile) => {
+                    const vertices = tile.vertexIndices.map((vIndex) =>
+                        vertexMap.get(vIndex)
+                    );
+                    if (vertices.some((v) => !v)) return;
+
+                    // Get vertex elevations
+                    const elevs = vertices.map((v) => v.elevation);
+
+                    // Get screen coordinates for vertices
+                    const screenVerts = vertices.map((v) => ({
+                        x: v.hexCoords.x * scale,
+                        y: v.hexCoords.y * scale,
+                    }));
+
+                    // Draw base color for this tile (handles flat areas)
+                    const minTileElev = Math.min(...elevs);
+                    const baseColor = getElevationColor(
+                        minTileElev,
+                        minElevation,
+                        maxElevation
+                    );
+
+                    ctx.fillStyle = baseColor;
+                    ctx.beginPath();
+                    ctx.moveTo(screenVerts[0].x, screenVerts[0].y);
+                    for (let i = 1; i < screenVerts.length; i++) {
+                        ctx.lineTo(screenVerts[i].x, screenVerts[i].y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // Draw contours within this quad (will overlay on base)
+                    const contourInterval = (maxElevation - minElevation) / 20;
+                    drawQuadContours(
+                        ctx,
+                        screenVerts,
+                        elevs,
+                        minElevation,
+                        maxElevation,
+                        contourInterval
+                    );
+                });
+            }
+
+            function drawTileBorders(scale) {
+                const vertexMap = new Map();
+                topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
+
+                ctx.strokeStyle = "#888888";
+                ctx.lineWidth = 0.5;
+
+                topoData.tiles.forEach((tile) => {
+                    const vertices = tile.vertexIndices.map((vIndex) =>
+                        vertexMap.get(vIndex)
+                    );
+                    if (vertices.some((v) => !v)) return;
+
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        vertices[0].hexCoords.x * scale,
+                        vertices[0].hexCoords.y * scale
+                    );
+                    for (let i = 1; i < vertices.length; i++) {
+                        ctx.lineTo(
+                            vertices[i].hexCoords.x * scale,
+                            vertices[i].hexCoords.y * scale
+                        );
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                });
+            }
+
+            function drawContours(scale) {
+                const vertexMap = new Map();
+                topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
+
+                // Draw contour lines at regular elevation intervals
+                const elevationRange = maxElevation - minElevation;
+                const contourInterval = elevationRange / 20;
+
+                ctx.strokeStyle = "rgba(100, 100, 100, 0.5)";
+                ctx.lineWidth = 1;
+
+                topoData.tiles.forEach((tile) => {
+                    const vertices = tile.vertexIndices.map((vIndex) =>
+                        vertexMap.get(vIndex)
+                    );
+                    if (vertices.some((v) => !v)) return;
+
+                    // Convert vertices to screen coordinates
+                    const screenVerts = vertices.map((v) => ({
+                        x: v.hexCoords.x * scale,
+                        y: v.hexCoords.y * scale,
+                    }));
+                    const elevs = vertices.map((v) => v.elevation);
+
+                    // Use shared marching squares library
+                    drawQuadContours(
+                        ctx,
+                        screenVerts,
+                        elevs,
+                        minElevation,
+                        maxElevation,
+                        contourInterval
+                    );
+                });
+            }
+
+            function drawVertices(scale) {
+                ctx.fillStyle = "#000000";
+                topoData.vertices.forEach((vertex) => {
+                    ctx.beginPath();
+                    ctx.arc(
+                        vertex.hexCoords.x * scale,
+                        vertex.hexCoords.y * scale,
+                        2,
+                        0,
+                        2 * Math.PI
+                    );
+                    ctx.fill();
+                });
+            }
+
+            function drawSelectedVertex(scale) {
+                const vertex = topoData.vertices.find(
+                    (v) => v.index === selectedVertexIndex
+                );
+                if (!vertex) return;
+
+                // Highlight neighbors
+                ctx.strokeStyle = "rgba(255, 165, 0, 0.6)";
+                ctx.lineWidth = 3;
+
+                vertex.neighbors.forEach((neighbor) => {
+                    const neighborVertex = topoData.vertices.find(
+                        (v) => v.index === neighbor.vertexIndex
+                    );
+                    if (neighborVertex) {
+                        ctx.beginPath();
+                        ctx.moveTo(
+                            vertex.hexCoords.x * scale,
+                            vertex.hexCoords.y * scale
+                        );
+                        ctx.lineTo(
+                            neighborVertex.hexCoords.x * scale,
+                            neighborVertex.hexCoords.y * scale
+                        );
+                        ctx.stroke();
+                    }
+                });
+
+                // Draw selected vertex
+                ctx.fillStyle = "#ff0000";
+                ctx.beginPath();
+                ctx.arc(
+                    vertex.hexCoords.x * scale,
+                    vertex.hexCoords.y * scale,
+                    5,
+                    0,
+                    2 * Math.PI
+                );
+                ctx.fill();
+
+                // Draw neighbor vertices
+                ctx.fillStyle = "#ff8800";
+                vertex.neighbors.forEach((neighbor) => {
+                    const neighborVertex = topoData.vertices.find(
+                        (v) => v.index === neighbor.vertexIndex
+                    );
+                    if (neighborVertex) {
+                        ctx.beginPath();
+                        ctx.arc(
+                            neighborVertex.hexCoords.x * scale,
+                            neighborVertex.hexCoords.y * scale,
+                            4,
+                            0,
+                            2 * Math.PI
+                        );
+                        ctx.fill();
+                    }
+                });
+            }
+
+            function displayVertexInfo(vertex) {
+                let html = `
+                    <h4>Vertex ${vertex.index}</h4>
+                    <div class="stat-row">
+                        <span class="stat-label">Hex Coordinates:</span>
+                        <span>(${vertex.hexCoords.x.toFixed(
+                            2
+                        )}, ${vertex.hexCoords.y.toFixed(2)})</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">TIFF Coordinates:</span>
+                        <span>(${vertex.tiffCoords.x.toFixed(
+                            2
+                        )}, ${vertex.tiffCoords.y.toFixed(2)})</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Elevation:</span>
+                        <span>${vertex.elevation.toFixed(2)} m</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Neighbors:</span>
+                        <span>${vertex.neighbors.length}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Adjacent Faces:</span>
+                        <span>${vertex.adjacentFaces.join(", ")}</span>
+                    </div>
+                    <h4 style="margin-top: 15px">Neighbor Connections:</h4>
+                `;
+
+                vertex.neighbors.forEach((neighbor, i) => {
+                    html += `
+                        <div class="neighbor-info">
+                            <strong>→ Vertex ${
+                                neighbor.vertexIndex
+                            }</strong><br>
+                            Horizontal Distance: ${neighbor.horizontalDistanceMeters.toFixed(
+                                2
+                            )} m<br>
+                            3D Distance: ${neighbor.distance3DMeters.toFixed(
+                                2
+                            )} m<br>
+                            Elevation Change: ${neighbor.elevationDiff.toFixed(
+                                2
+                            )} m<br>
+                            Slope: ${neighbor.slopePercent.toFixed(
+                                2
+                            )}% (${neighbor.slopeAngle.toFixed(2)}°)
+                        </div>
+                    `;
+                });
+
+                document.getElementById("vertex-details").innerHTML = html;
+            }
+
+            function updateStats() {
+                const mapping = topoData.mapping;
+                const params = topoData.hexMapParams;
+
+                const html = `
+                    <h4>Hex Map Parameters</h4>
+                    <div class="stat-row">
+                        <span class="stat-label">Grid Diameter:</span>
+                        <span>${params.hexGridDiameter}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Ring Count:</span>
+                        <span>${params.hexRingCount}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Random Seed:</span>
+                        <span>${params.randomSeed}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Relaxation Iterations:</span>
+                        <span>${params.relaxationIterations}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Relaxation Strength:</span>
+                        <span>${params.relaxationStrength}</span>
+                    </div>
+
+                    <h4 style="margin-top: 15px">Map Statistics</h4>
+                    <div class="stat-row">
+                        <span class="stat-label">Vertices:</span>
+                        <span>${topoData.vertices.length}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Tiles:</span>
+                        <span>${topoData.tiles.length}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Elevation Range:</span>
+                        <span>${minElevation.toFixed(
+                            2
+                        )} m to ${maxElevation.toFixed(2)} m</span>
+                    </div>
+
+                    <h4 style="margin-top: 15px">Canvas Information</h4>
+                    <div class="stat-row">
+                        <span class="stat-label">Canvas Size:</span>
+                        <span>${mapping.canvasWidth} × ${
+                    mapping.canvasHeight
+                } pixels</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Hexagon on Canvas:</span>
+                        <span>${mapping.actualHexCanvasWidth.toFixed(
+                            0
+                        )} × ${mapping.actualHexCanvasHeight.toFixed(
+                    0
+                )} pixels</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Empty Space:</span>
+                        <span>${mapping.emptyCanvasHeight.toFixed(
+                            0
+                        )}px at bottom</span>
+                    </div>
+
+                    <h4 style="margin-top: 15px">Real-World Mapping</h4>
+                    <div class="stat-row">
+                        <span class="stat-label">TIFF Dimensions:</span>
+                        <span>${mapping.tiffWidth} × ${
+                    mapping.tiffHeight
+                } pixels</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">TIFF Real Size:</span>
+                        <span>${(mapping.tiffWidthMeters / 1000).toFixed(
+                            2
+                        )} × ${(mapping.tiffHeightMeters / 1000).toFixed(
+                    2
+                )} km</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">TIFF Resolution:</span>
+                        <span>${
+                            mapping.metersPerTiffPixel
+                        } m/pixel (COP30)</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Canvas Scale:</span>
+                        <span>1 canvas pixel = ${mapping.metersPerCanvasPixel.toFixed(
+                            2
+                        )} meters</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Map Coverage:</span>
+                        <span>${(
+                            (mapping.actualHexCanvasWidth *
+                                mapping.metersPerCanvasPixel) /
+                            1000
+                        ).toFixed(2)} × ${(
+                    (mapping.actualHexCanvasHeight *
+                        mapping.metersPerCanvasPixel) /
+                    1000
+                ).toFixed(2)} km</span>
+                    </div>
+                `;
+
+                document.getElementById("stats").innerHTML = html;
+            }
+
+            function updateLegend() {
+                // Create gradient
+                const legendCanvas = document.getElementById("legend-gradient");
+                legendCanvas.style.background = `linear-gradient(to right, 
+                    ${getElevationColor(
+                        minElevation,
+                        minElevation,
+                        maxElevation
+                    )}, 
+                    ${getElevationColor(
+                        minElevation + (maxElevation - minElevation) * 0.25,
+                        minElevation,
+                        maxElevation
+                    )},
+                    ${getElevationColor(
+                        minElevation + (maxElevation - minElevation) * 0.5,
+                        minElevation,
+                        maxElevation
+                    )},
+                    ${getElevationColor(
+                        minElevation + (maxElevation - minElevation) * 0.75,
+                        minElevation,
+                        maxElevation
+                    )},
+                    ${getElevationColor(
+                        maxElevation,
+                        minElevation,
+                        maxElevation
+                    )})`;
+
+                document.getElementById(
+                    "legend-min"
+                ).textContent = `${minElevation.toFixed(0)} m`;
+                document.getElementById(
+                    "legend-max"
+                ).textContent = `${maxElevation.toFixed(0)} m`;
+            }
+
+            function updateProgress(message) {
+                document.getElementById("progress").textContent = message;
+            }
+        </script>
+    </body>
+</html>
