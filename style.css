@@ -2,6 +2,22 @@ html,
 body {
     margin: 0;
     padding: 0;
+    font-size: 24px;
+    font-family: sans-serif;
+}
+
+button,
+input {
+    font-size: 24px;
+}
+
+input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
+
+#controls > div {
+    margin-bottom: 5px;
 }
 
 canvas {

@@ -5,6 +5,8 @@
         <title>World Simulator</title>
         <link rel="stylesheet" href="style.css" />
         <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script src="vertex.js"></script>
+        <script src="utils.js"></script>
         <script src="marchingSquares.js"></script>
         <script src="pathfinding.js"></script>
         <script src="simulation.js"></script>
@@ -15,13 +17,21 @@
 
         <div id="controls">
             <div>
+                <strong>File:</strong>
                 <button id="loadFileBtn">Load Topology File</button>
                 <input type="file" id="fileInput" accept=".json" />
-                <button id="createRouteBtn">Create Random Route</button>
-                <button id="populateBtn">Populate Settlements</button>
-                <button id="runStepBtn">Run Simulation Step</button>
-                <button id="clearRoutesBtn">Clear All Routes</button>
                 <button id="resetSimBtn">Reset Simulation</button>
+            </div>
+            <div>
+                <strong>Pathfinding:</strong>
+                <button id="createRouteBtn">Create Random Route</button>
+                <button id="clearRoutesBtn">Clear All Routes</button>
+            </div>
+            <div>
+                <strong>Castes:</strong>
+                <button id="addLordBtn">Add Lord</button>
+                <button id="addFarmerBtn">Add Farmer</button>
+                <button id="addMerchantBtn">Add Merchant</button>
             </div>
 
             <div>
@@ -121,6 +131,14 @@
                     <input type="checkbox" id="showTraffic" checked />
                     Show Traffic Weights
                 </label>
+                <label>
+                    <input type="checkbox" id="showBuildings" checked />
+                    Show Buildings
+                </label>
+                <label>
+                    <input type="checkbox" id="showRoutes" checked />
+                    Show Routes
+                </label>
             </div>
 
             <div>
@@ -144,6 +162,22 @@
                 <label>
                     <input type="checkbox" id="showMerchantValue" />
                     Merchant Value
+                </label>
+                <label>
+                    <input type="checkbox" id="showSteepness" />
+                    Steepness
+                </label>
+                <label>
+                    <input type="checkbox" id="showHabitable" />
+                    Habitable
+                </label>
+                <label>
+                    <input type="checkbox" id="showOccupied" />
+                    Occupied
+                </label>
+                <label>
+                    <input type="checkbox" id="showVertexInspector" />
+                    Vertex Inspector
                 </label>
             </div>
 

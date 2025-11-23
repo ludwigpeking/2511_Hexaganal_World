@@ -66,24 +66,87 @@ function pathFinding(start, end, trafficWeight) {
         const path = [];
         let node = end;
 
+        // First pass: collect all path vertices
+        const pathVertices = new Set();
+        let temp = end;
+        while (temp) {
+            pathVertices.add(temp.index);
+            temp = temp.from;
+        }
+
+        // Second pass: add traffic to path vertices and mark as occupied
+        node = end;
         while (node) {
             path.unshift(node.index);
             node.traffic += trafficWeight;
+            node.trafficValue = node.traffic; // Update traffic value for merchant calculations
             node.occupied = true; // Mark route vertices as occupied
-
-            // Add traffic to neighboring vertices as well
-            node.neighbors.forEach((neighborData) => {
-                const neighbor = topoData.vertices.find(
-                    (v) => v.index === neighborData.vertexIndex
-                );
-                if (neighbor) {
-                    neighbor.traffic += trafficWeight * 0.5; // Neighbors get half the traffic
-                    neighbor.trafficValue = neighbor.traffic; // Update traffic value for merchant calculations
-                }
-            });
-
             node = node.from;
         }
+
+        // Third pass: add traffic to neighbors (only once per neighbor per route)
+        const neighborTrafficAdded = new Set();
+        pathVertices.forEach((pathIndex) => {
+            const pathVertex = topoData.vertices.find(
+                (v) => v.index === pathIndex
+            );
+            if (pathVertex) {
+                pathVertex.neighbors.forEach((neighborData) => {
+                    const neighborIndex = neighborData.vertexIndex;
+                    // Only add traffic if neighbor is not on the path AND hasn't been processed yet
+                    if (
+                        !pathVertices.has(neighborIndex) &&
+                        !neighborTrafficAdded.has(neighborIndex)
+                    ) {
+                        const neighbor = topoData.vertices.find(
+                            (v) => v.index === neighborIndex
+                        );
+                        if (neighbor) {
+                            neighbor.traffic += trafficWeight * 0.5; // Neighbors get half the traffic
+                            neighbor.trafficValue = neighbor.traffic; // Update traffic value for merchant calculations
+                            neighborTrafficAdded.add(neighborIndex);
+                        }
+                    }
+                });
+            }
+        });
+
+        // Fourth pass: increment trafficCount on edges between consecutive path vertices
+        for (let i = 0; i < path.length - 1; i++) {
+            const currentIndex = path[i];
+            const nextIndex = path[i + 1];
+            const currentVertex = topoData.vertices.find(
+                (v) => v.index === currentIndex
+            );
+            const nextVertex = topoData.vertices.find(
+                (v) => v.index === nextIndex
+            );
+
+            if (currentVertex && nextVertex) {
+                // Increment trafficCount on the edge from current to next
+                const forwardEdge = currentVertex.neighbors.find(
+                    (n) => n.vertexIndex === nextIndex
+                );
+                if (forwardEdge) {
+                    if (forwardEdge.trafficCount === undefined)
+                        forwardEdge.trafficCount = 0;
+                    forwardEdge.trafficCount += trafficWeight;
+                }
+
+                // Increment trafficCount on the edge from next to current (mutual)
+                const backwardEdge = nextVertex.neighbors.find(
+                    (n) => n.vertexIndex === currentIndex
+                );
+                if (backwardEdge) {
+                    if (backwardEdge.trafficCount === undefined)
+                        backwardEdge.trafficCount = 0;
+                    backwardEdge.trafficCount += trafficWeight;
+                }
+            }
+        }
+
+        // Recalculate movement costs to apply traffic reduction
+        calculateMovementCosts();
 
         return path;
     }
@@ -160,6 +223,8 @@ function createRandomRoute() {
             } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
         );
         updateRouteStats();
+        if (typeof invalidateBuffers !== "undefined")
+            invalidateBuffers("static");
         redraw();
     } else {
         updateProgress("Failed to find route!");
@@ -176,6 +241,11 @@ function createHardcodedRoute(startIndex, endIndex) {
         console.error(`Could not find vertices ${startIndex} or ${endIndex}`);
         return;
     }
+
+    // Set global trade destinations
+    tradeDestination1 = start;
+    tradeDestination2 = end;
+    console.log(`Trade destinations set: ${startIndex} and ${endIndex}`);
 
     const trafficWeight = parseFloat(select("#trafficWeight").value());
 
@@ -196,6 +266,8 @@ function createHardcodedRoute(startIndex, endIndex) {
             } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
         );
         updateRouteStats();
+        if (typeof invalidateBuffers !== "undefined")
+            invalidateBuffers("static");
     } else {
         updateProgress(
             `Failed to find hardcoded route from ${startIndex} to ${endIndex}!`
@@ -209,6 +281,7 @@ function clearRoutes() {
         v.traffic = 0;
     });
     updateRouteStats();
+    if (typeof invalidateBuffers !== "undefined") invalidateBuffers("static");
     redraw();
     updateProgress("All routes cleared");
 }

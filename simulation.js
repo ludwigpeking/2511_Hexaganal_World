@@ -6,7 +6,11 @@ let habitable = [];
 let minBuffer = 5;
 let professions = ["Lord", "Farmer", "Merchant"];
 let farmerRange = 50; // in canvas pixels
-let waterAccessDist = 30; // in canvas pixels
+let waterAccessDist = 200; // in canvas pixels
+let FARM_ELEVATION_THRESHOLD = 150; // Elevation above which farming is not viable
+let farmerValueRadius = 200; // Radius for farmer value calculation
+let vertexQuadtree = null; // Quadtree for spatial queries
+// Note: tradeDestination1 and tradeDestination2 are defined in sketch.js
 
 // Value system
 // Lord: defense (from terrain); considers traffic
@@ -151,12 +155,8 @@ function initializeSimulationValues() {
 
     // Initialize all vertex values
     vertices.forEach((vertex) => {
-        vertex.defense = 0;
-        vertex.farmValue = 0;
-        vertex.merchantValue = 0;
-        vertex.security = 0;
+        vertex.security = 1; // Base security value of 1 to allow farmers/merchants before Lord
         vertex.trafficValue = vertex.traffic || 0;
-        vertex.farmerValue = 0;
 
         if (vertex.occupied === undefined) {
             vertex.occupied = false;
@@ -166,59 +166,40 @@ function initializeSimulationValues() {
         vertex.habitable = !vertex.water;
     });
 
-    // Build temporary habitable list for defense calculation
-    const tempHabitable = vertices.filter((v) => v.habitable && !v.occupied);
-
-    // Calculate defense values based on terrain
+    // Calculate steepness for each vertex
+    let steepnessCount = 0;
     vertices.forEach((vertex) => {
-        if (!vertex.habitable) return;
-
-        // Defense increases with elevation and roughness
-        let defenseValue = vertex.elevation * 2;
-
-        // Check neighbors for elevation difference (roughness)
-        let totalElevDiff = 0;
-        let neighborCount = 0;
-        vertex.neighbors.forEach((neighbor) => {
-            const neighborVertex = vertices.find(
-                (v) => v.index === neighbor.vertexIndex
-            );
-            if (neighborVertex) {
-                totalElevDiff += Math.abs(neighbor.elevationDiff || 0);
-                neighborCount++;
-            }
-        });
-
-        if (neighborCount > 0) {
-            const avgRoughness = totalElevDiff / neighborCount;
-            defenseValue += avgRoughness * 10;
-        }
-
-        vertex.defense = defenseValue;
+        vertex.calculateSteepness();
+        if (vertex.steepness > 0) steepnessCount++;
     });
+
+    console.log(`Calculated steepness for ${steepnessCount} vertices`);
+
+    // Calculate defense values using vertex method
+    calculateDefenseValues();
 
     // Calculate initial farm values based on terrain
     calculateInitialFarmValues();
+
+    // Build quadtree for spatial queries
+    console.log("Building quadtree for spatial optimization...");
+    const boundary = { x: 0, y: 0, width: 2400, height: 2400 };
+    vertexQuadtree = new Quadtree(boundary, 4);
+    vertices.forEach((v) => {
+        // Insert all vertices into quadtree for inspector tool
+        vertexQuadtree.insert(v);
+    });
+    console.log("Quadtree built");
+
+    // Calculate initial farmer values (merchant values auto-update via setters)
+    calculateFarmerValues();
 
     console.log("Simulation values initialized");
 }
 
 function calculateInitialFarmValues() {
     // Calculate farm value based on elevation and water access only
-    // (no settlements exist yet)
     vertices.forEach((vertex) => {
-        if (vertex.water || vertex.elevation > 100) {
-            vertex.farmValue = 0;
-            return;
-        }
-
-        let farmVal = 1;
-
-        // Bonus for moderate elevation (flat-ish land)
-        if (vertex.elevation < 50) {
-            farmVal *= 1.5;
-        }
-
         // Check for water access
         let hasWaterAccess = false;
         vertices.forEach((v) => {
@@ -232,9 +213,7 @@ function calculateInitialFarmValues() {
             }
         });
 
-        if (hasWaterAccess) farmVal *= 2;
-
-        vertex.farmValue = farmVal;
+        vertex.calculateFarmValue(hasWaterAccess, FARM_ELEVATION_THRESHOLD);
         vertex.farmerNr = 0;
     });
 }
@@ -245,7 +224,7 @@ function initializeHabitable() {
         vertex.defense = 0;
         vertex.farmValue = 0;
         vertex.merchantValue = 0;
-        vertex.security = 0;
+        vertex.security = 1; // Base security value of 1
         vertex.trafficValue = vertex.traffic || 0;
         vertex.farmerValue = 0;
 
@@ -269,30 +248,7 @@ function initializeHabitable() {
 
 function calculateDefenseValues() {
     vertices.forEach((vertex) => {
-        if (!vertex.habitable) return;
-
-        // Defense increases with elevation and roughness
-        let defenseValue = vertex.elevation * 2;
-
-        // Check neighbors for elevation difference (roughness)
-        let totalElevDiff = 0;
-        let neighborCount = 0;
-        vertex.neighbors.forEach((neighbor) => {
-            const neighborVertex = vertices.find(
-                (v) => v.index === neighbor.vertexIndex
-            );
-            if (neighborVertex) {
-                totalElevDiff += Math.abs(neighbor.elevationDiff || 0);
-                neighborCount++;
-            }
-        });
-
-        if (neighborCount > 0) {
-            const avgRoughness = totalElevDiff / neighborCount;
-            defenseValue += avgRoughness * 10;
-        }
-
-        vertex.defense = defenseValue;
+        vertex.calculateDefense();
     });
 }
 
@@ -362,8 +318,16 @@ function createLord() {
 
     console.log("Central habitable vertices:", centralHabitable.length);
 
-    // Find vertex with highest defense value in central area
-    centralHabitable.sort((a, b) => b.defense - a.defense);
+    // Calculate farm values first for better Lord placement
+    calculateInitialFarmValues();
+    calculateFarmerValues();
+
+    // Find vertex with highest combined value (defense + 0.25 * farmerValue)
+    centralHabitable.sort((a, b) => {
+        const scoreA = a.defense + 0.25 * a.farmerValue;
+        const scoreB = b.defense + 0.25 * b.farmerValue;
+        return scoreB - scoreA;
+    });
     const castleVertex = centralHabitable[0];
 
     console.log(
@@ -382,28 +346,55 @@ function createLord() {
 
     console.log("Lord settlement created");
 
-    // Create routes to edge vertices if they exist
-    if (edgeVertices.length >= 2) {
-        const start = edgeVertices[0];
-        const end = edgeVertices[edgeVertices.length - 1];
-        pathFinding(castleVertex, start, lord.trafficWeight);
-        pathFinding(castleVertex, end, lord.trafficWeight);
-        console.log("Lord routes created to edge vertices");
-    }
-
     lord.makeBuffer();
 
-    // Cast security to the realm
-    habitable.forEach((v) => {
+    // Create routes to trade destinations if they exist
+    if (tradeDestination1) {
+        const path1 = pathFinding(
+            castleVertex,
+            tradeDestination1,
+            lord.trafficWeight
+        );
+        if (path1) {
+            const route1 = new Route(
+                castleVertex,
+                tradeDestination1,
+                lord.trafficWeight,
+                path1
+            );
+            routes.push(route1);
+        }
+    }
+    if (tradeDestination2) {
+        const path2 = pathFinding(
+            castleVertex,
+            tradeDestination2,
+            lord.trafficWeight
+        );
+        if (path2) {
+            const route2 = new Route(
+                castleVertex,
+                tradeDestination2,
+                lord.trafficWeight,
+                path2
+            );
+            routes.push(route2);
+        }
+    }
+
+    // Cast security to the realm - propagate across all vertices
+    vertices.forEach((v) => {
         const dx = v.x - castleVertex.x;
         const dy = v.y - castleVertex.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq > 0) {
-            v.security += 100 / distSq;
+        const dist = sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+            v.security += 1000 / dist;
         }
     });
 
+    // Recalculate all dependent values
     calculateFarmValue();
+    calculateMerchantValue();
 }
 
 function createFarmer() {
@@ -420,7 +411,20 @@ function createFarmer() {
 
     // Create route to castle if exists
     if (castleVertices.length > 0) {
-        pathFinding(farmerVertex, castleVertices[0], farmer.trafficWeight * 2);
+        const path = pathFinding(
+            farmerVertex,
+            castleVertices[0],
+            farmer.trafficWeight * 2
+        );
+        if (path) {
+            const route = new Route(
+                farmerVertex,
+                castleVertices[0],
+                farmer.trafficWeight * 2,
+                path
+            );
+            routes.push(route);
+        }
     }
 
     farmer.makeBuffer();
@@ -450,19 +454,54 @@ function createMerchant() {
     const merchant = new Settlement(merchantVertex, "Merchant");
     settlements.push(merchant);
 
-    // Create routes to important locations
-    if (edgeVertices.length >= 2) {
-        const start = edgeVertices[0];
-        const end = edgeVertices[edgeVertices.length - 1];
-        pathFinding(merchantVertex, start, merchant.trafficWeight);
-        pathFinding(merchantVertex, end, merchant.trafficWeight);
+    // Create routes to trade destinations and castle
+    if (tradeDestination1) {
+        const path1 = pathFinding(
+            merchantVertex,
+            tradeDestination1,
+            merchant.trafficWeight
+        );
+        if (path1) {
+            const route1 = new Route(
+                merchantVertex,
+                tradeDestination1,
+                merchant.trafficWeight,
+                path1
+            );
+            routes.push(route1);
+        }
+    }
+    if (tradeDestination2) {
+        const path2 = pathFinding(
+            merchantVertex,
+            tradeDestination2,
+            merchant.trafficWeight
+        );
+        if (path2) {
+            const route2 = new Route(
+                merchantVertex,
+                tradeDestination2,
+                merchant.trafficWeight,
+                path2
+            );
+            routes.push(route2);
+        }
     }
     if (castleVertices.length > 0) {
-        pathFinding(
+        const path3 = pathFinding(
             merchantVertex,
             castleVertices[0],
             merchant.trafficWeight * 2
         );
+        if (path3) {
+            const route3 = new Route(
+                merchantVertex,
+                castleVertices[0],
+                merchant.trafficWeight * 2,
+                path3
+            );
+            routes.push(route3);
+        }
     }
 
     merchant.makeBuffer();
@@ -479,18 +518,8 @@ function createMerchant() {
 }
 
 function calculateFarmValue() {
-    // Reset farm values
-    vertices.forEach((v) => {
-        v.farmValue = 0;
-        v.farmerNr = 0;
-    });
-
     // Calculate farm value based on elevation, water, and existing farmers
     vertices.forEach((vertex) => {
-        if (vertex.water || vertex.elevation > 100) return; // Too high or underwater
-
-        let farmVal = 1;
-
         // Check for water access
         let hasWaterAccess = false;
         vertices.forEach((v) => {
@@ -504,9 +533,9 @@ function calculateFarmValue() {
             }
         });
 
-        if (hasWaterAccess) farmVal *= 2;
+        vertex.calculateFarmValue(hasWaterAccess, FARM_ELEVATION_THRESHOLD);
 
-        // Check for existing farmers nearby
+        // Apply farmer density penalty
         let nearbyFarmers = 0;
         settlements.forEach((s) => {
             if (s.profession === "Farmer") {
@@ -520,20 +549,61 @@ function calculateFarmValue() {
         });
 
         vertex.farmerNr = nearbyFarmers;
-        farmVal = farmVal / (1 + nearbyFarmers);
-
-        vertex.farmValue = farmVal;
+        vertex.farmValue = vertex.farmValue / (1 + nearbyFarmers);
     });
 
     // Calculate farmer preference value
-    habitable.forEach((v) => {
-        v.farmerValue = v.farmValue * sqrt(v.security);
-    });
+    calculateFarmerValues();
 }
 
 function calculateMerchantValue() {
-    habitable.forEach((v) => {
-        v.merchantValue = v.security * v.trafficValue;
+    // This function is now just for traversing - actual calculation happens in vertex
+    console.log("calculateMerchantValue called (traversing vertices)");
+    let count = 0;
+    vertices.forEach((v) => {
+        v.updateMerchantValue();
+        if (v.merchantValue > 0) count++;
+    });
+    console.log(`Updated merchant values: ${count} vertices with value > 0`);
+}
+
+function calculateFarmerValues() {
+    if (!vertexQuadtree) {
+        console.warn("Quadtree not initialized, using fallback calculation");
+        vertices.forEach((vertex) => {
+            vertex.calculateFarmerValue(vertex.farmValue, 0);
+        });
+        return;
+    }
+
+    vertices.forEach((vertex) => {
+        // Query vertices within radius using quadtree
+        const range = { x: vertex.x, y: vertex.y, r: farmerValueRadius };
+        const nearbyVertices = vertexQuadtree.query(range);
+
+        // Sum farm values in radius
+        let totalFarmValue = 0;
+        nearbyVertices.forEach((v) => {
+            if (v.farmValue > 0) {
+                totalFarmValue += v.farmValue;
+            }
+        });
+
+        // Count farmers in radius
+        let farmerCount = 0;
+        settlements.forEach((s) => {
+            if (s.profession === "Farmer") {
+                const dx = s.vertex.x - vertex.x;
+                const dy = s.vertex.y - vertex.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= farmerValueRadius * farmerValueRadius) {
+                    farmerCount++;
+                }
+            }
+        });
+
+        // Use vertex method to calculate
+        vertex.calculateFarmerValue(totalFarmValue, farmerCount);
     });
 }
 
@@ -582,8 +652,11 @@ function drawSecurityValue() {
         if (v.security > maxSecurity) maxSecurity = v.security;
     });
 
+    console.log(`Security layer: maxSecurity=${maxSecurity}`);
+
     if (maxSecurity === 0) return; // Nothing to show
 
+    colorMode(RGB);
     vertices.forEach((vtx) => {
         if (
             vtx.security > 0 &&
@@ -591,7 +664,6 @@ function drawSecurityValue() {
             vtx.surroundingTiles.length > 0
         ) {
             noStroke();
-            colorMode(RGB);
             fill(255, 200, 0, map(vtx.security, 0, maxSecurity, 0, 200));
 
             beginShape();
@@ -618,7 +690,11 @@ function drawFarmValueLayer() {
 
     if (maxFarmValue === 0) return; // Nothing to show
 
-    colorMode(HSB);
+    // Define color range: white (0) to green (max)
+    let from = color(255, 255, 255); // lowest = white
+    let to = color(120, 255, 100); // highest = green
+    colorMode(RGB);
+
     vertices.forEach((vtx) => {
         if (
             vtx.farmValue > 0 &&
@@ -626,12 +702,8 @@ function drawFarmValueLayer() {
             vtx.surroundingTiles.length > 0
         ) {
             noStroke();
-            fill(
-                120 - map(vtx.farmValue, 0, maxFarmValue, 0, 120),
-                100,
-                100,
-                150
-            );
+            let fillColor = lerpColor(from, to, vtx.farmValue / maxFarmValue);
+            fill(fillColor);
 
             beginShape();
             vtx.surroundingTiles.forEach((tile) => {
@@ -645,7 +717,6 @@ function drawFarmValueLayer() {
             text(round(vtx.farmValue * 10) / 10, vtx.x, vtx.y);
         }
     });
-    colorMode(RGB);
 }
 
 function drawFarmerValueLayer() {
@@ -691,15 +762,28 @@ function drawFarmerValueLayer() {
 }
 
 function drawMerchantValueLayer() {
-    if (!vertices || vertices.length === 0) return;
+    console.log("drawMerchantValueLayer called");
+    if (!vertices || vertices.length === 0) {
+        console.log("No vertices available");
+        return;
+    }
 
     let maxMerchantValue = 0;
+    let verticesWithMerchantValue = 0;
     vertices.forEach((v) => {
         if (v.merchantValue > maxMerchantValue)
             maxMerchantValue = v.merchantValue;
+        if (v.merchantValue > 0) verticesWithMerchantValue++;
     });
 
-    if (maxMerchantValue === 0) return; // Nothing to show
+    console.log(
+        `Merchant layer: ${verticesWithMerchantValue} vertices with value > 0, max=${maxMerchantValue}`
+    );
+
+    if (maxMerchantValue === 0) {
+        console.log("No merchant value to display");
+        return; // Nothing to show
+    }
 
     colorMode(HSB);
     vertices.forEach((vtx) => {
@@ -725,6 +809,108 @@ function drawMerchantValueLayer() {
         }
     });
     colorMode(RGB);
+}
+
+function drawSteepnessLayer() {
+    console.log("drawSteepnessLayer called");
+    if (!vertices || vertices.length === 0) {
+        console.log("No vertices available");
+        return;
+    }
+
+    let maxSteepness = 0;
+    let minSteepness = Infinity;
+    let verticesWithSteepness = 0;
+
+    vertices.forEach((v) => {
+        if (v.steepness !== undefined && v.steepness > 0) {
+            verticesWithSteepness++;
+            if (v.steepness > maxSteepness) maxSteepness = v.steepness;
+            if (v.steepness < minSteepness) minSteepness = v.steepness;
+        }
+    });
+
+    console.log(
+        `Steepness layer: ${verticesWithSteepness} vertices, min=${minSteepness}, max=${maxSteepness}`
+    );
+
+    if (verticesWithSteepness === 0 || maxSteepness === 0) {
+        console.log("No steepness data to display");
+        return; // Nothing to show
+    }
+
+    colorMode(HSB);
+    vertices.forEach((vtx) => {
+        if (
+            vtx.steepness !== undefined &&
+            vtx.steepness >= 0 &&
+            vtx.surroundingTiles &&
+            vtx.surroundingTiles.length > 0
+        ) {
+            noStroke();
+            // Use blue to red gradient (240 to 0 hue)
+            let hue = map(vtx.steepness, 0, maxSteepness, 240, 0);
+            fill(hue, 100, 100, 150);
+
+            beginShape();
+            vtx.surroundingTiles.forEach((tile) => {
+                vertex(tile.centerX, tile.centerY);
+            });
+            endShape(CLOSE);
+
+            if (vtx.steepness > 0) {
+                fill(0);
+                textAlign(CENTER, CENTER);
+                textSize(10);
+                text(round(vtx.steepness * 100) / 100, vtx.x, vtx.y);
+            }
+        }
+    });
+    colorMode(RGB);
+}
+
+function drawHabitableLayer() {
+    if (!vertices || vertices.length === 0) return;
+
+    colorMode(RGB);
+    vertices.forEach((vtx) => {
+        if (
+            vtx.habitable &&
+            vtx.surroundingTiles &&
+            vtx.surroundingTiles.length > 0
+        ) {
+            noStroke();
+            fill(0, 255, 0, 100); // Green with transparency
+
+            beginShape();
+            vtx.surroundingTiles.forEach((tile) => {
+                vertex(tile.centerX, tile.centerY);
+            });
+            endShape(CLOSE);
+        }
+    });
+}
+
+function drawOccupiedLayer() {
+    if (!vertices || vertices.length === 0) return;
+
+    colorMode(RGB);
+    vertices.forEach((vtx) => {
+        if (
+            vtx.occupied &&
+            vtx.surroundingTiles &&
+            vtx.surroundingTiles.length > 0
+        ) {
+            noStroke();
+            fill(255, 0, 0, 150); // Red with transparency
+
+            beginShape();
+            vtx.surroundingTiles.forEach((tile) => {
+                vertex(tile.centerX, tile.centerY);
+            });
+            endShape(CLOSE);
+        }
+    });
 }
 
 function drawSettlements() {
