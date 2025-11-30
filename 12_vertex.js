@@ -48,6 +48,7 @@ class Vertex {
         this.farmerValue = 0;
         this.steepness = 0;
         this.farmerNr = 0;
+        this.floodedNeighbors = []; // Vertices reachable within movement cost budget
     }
 
     // Getter and setter for security with automatic merchant value recalculation
@@ -117,14 +118,15 @@ class Vertex {
         }
 
         // Defense increases with elevation and roughness
-        let defenseValue = this.elevation * 2;
+        // let defenseValue = this.elevation * 2;
+        let defenseValue = this.elevation / 2;
 
         // Check neighbors for elevation difference (roughness)
         let totalElevDiff = 0;
         let neighborCount = 0;
         this.neighbors.forEach((neighbor) => {
             if (neighbor.elevationDiff !== undefined) {
-                totalElevDiff += Math.abs(neighbor.elevationDiff);
+                totalElevDiff -= neighbor.elevationDiff;
                 neighborCount++;
             }
         });

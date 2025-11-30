@@ -9,7 +9,8 @@ let farmerRange = 50; // in canvas pixels
 let waterAccessDist = 200; // in canvas pixels
 let FARM_ELEVATION_THRESHOLD = 150; // Elevation above which farming is not viable
 let farmerValueRadius = 200; // Radius for farmer value calculation
-let FARMER_MOVE_COST_RANGE = 200; // Movement cost budget for farmer value calculation
+let FARMER_MOVE_COST_RANGE = 100; // Movement cost budget for farmer value calculation
+let VINCINITY_MOVE_COST_RANGE = 40; // Movement cost budget for vicinity calculation
 let vertexQuadtree = null; // Quadtree for spatial queries
 // Note: tradeDestination1 and tradeDestination2 are defined in sketch.js
 
@@ -24,27 +25,31 @@ class Settlement {
         this.profession = profession;
         this.nr = settlementNr++;
         this.trafficWeight =
-            profession === "Merchant" || profession === "Lord" ? 3 : 1;
+            profession === "Lord" ? 6 : profession === "Merchant" ? 2 : 1;
         this.buffer =
             profession === "Lord" ? 2 : profession === "Farmer" ? 1 : 0;
         this.color = this.getProfessionColor();
 
         vertex.occupied = true;
         vertex.occupiedBy = this;
+        vertex.occupiedByRoute = false; // Settlement vertices can have routes start/end here
         vertex.attrition = 500;
 
         // Remove from habitable
         habitable = habitable.filter((v) => v.index !== vertex.index);
 
-        // Mark neighbors as occupied
-        vertex.neighbors.forEach((neighbor) => {
-            const neighborVertex = vertices.find(
-                (v) => v.index === neighbor.vertexIndex
-            );
-            if (neighborVertex) {
-                neighborVertex.occupied = true;
-            }
-        });
+        // Mark neighbors as occupied (but not for merchants)
+        if (profession !== "Merchant") {
+            vertex.neighbors.forEach((neighbor) => {
+                const neighborVertex = vertices.find(
+                    (v) => v.index === neighbor.vertexIndex
+                );
+                if (neighborVertex) {
+                    neighborVertex.occupied = true;
+                    neighborVertex.occupiedByRoute = false; // Neighbors are buffers, not route-occupied
+                }
+            });
+        }
     }
 
     getProfessionColor() {
@@ -242,8 +247,8 @@ function initializeHabitable() {
 function populateHabitableArray() {
     habitable = [];
     vertices.forEach((vertex) => {
-        // Only add to habitable if both habitable AND not occupied
-        if (vertex.habitable && !vertex.occupied) {
+        // Only add to habitable if habitable AND not occupied by anything (settlements or routes)
+        if (vertex.habitable && !vertex.occupied && !vertex.occupiedByRoute) {
             habitable.push(vertex);
         }
     });
@@ -326,8 +331,8 @@ function createLord() {
 
     // Find vertex with highest combined value (defense + 0.25 * farmerValue)
     centralHabitable.sort((a, b) => {
-        const scoreA = a.defense + 0.3 * a.farmerValue;
-        const scoreB = b.defense + 0.3 * b.farmerValue;
+        const scoreA = a.defense + 0.5 * a.farmerValue;
+        const scoreB = b.defense + 0.5 * b.farmerValue;
         return scoreB - scoreA;
     });
     const castleVertex = centralHabitable[0];
@@ -384,21 +389,56 @@ function createLord() {
         }
     }
 
-    // Cast security to the realm - propagate across all vertices
-    vertices.forEach((v) => {
-        const dx = v.x - castleVertex.x;
-        const dy = v.y - castleVertex.y;
-        const dist = sqrt(dx * dx + dy * dy);
-        if (dist > 0) {
-            v.security += 1000 / dist;
-        }
-    });
+    // Cast security to the realm - propagate to flooded neighbors only
+    if (
+        castleVertex.floodedNeighbors &&
+        castleVertex.floodedNeighbors.length > 0
+    ) {
+        castleVertex.floodedNeighbors.forEach((v) => {
+            v.security += 15;
+        });
 
-    // Recalculate merchant values (security changed, so merchant value changes)
-    calculateMerchantValue();
+        // Recalculate merchant values for affected vertices
+        castleVertex.floodedNeighbors.forEach((v) => {
+            v.updateMerchantValue();
+        });
 
-    // No need to recalculate farm values - they don't depend on security changes
-    // Farmer values will be updated when farmers are actually placed
+        // Recalculate farmer values for affected vertices
+        castleVertex.floodedNeighbors.forEach((affectedVertex) => {
+            const nearbyVertices = affectedVertex.floodedNeighbors || [];
+
+            // Sum farm values in range
+            let totalFarmValue = 0;
+            nearbyVertices.forEach((v) => {
+                if (v.farmValue > 0) {
+                    totalFarmValue += v.farmValue;
+                }
+            });
+
+            // Count farmers in flooded neighbors
+            let farmerCount = 0;
+            if (
+                affectedVertex.floodedNeighbors &&
+                affectedVertex.floodedNeighbors.length > 0
+            ) {
+                settlements.forEach((s) => {
+                    if (s.profession === "Farmer") {
+                        // Check if farmer is in the flooded neighbors
+                        const isInFloodedNeighbors =
+                            affectedVertex.floodedNeighbors.some(
+                                (v) => v.index === s.vertex.index
+                            );
+                        if (isInFloodedNeighbors) {
+                            farmerCount++;
+                        }
+                    }
+                });
+            }
+
+            // Use vertex method to calculate
+            affectedVertex.calculateFarmerValue(totalFarmValue, farmerCount);
+        });
+    }
 }
 
 function createFarmer() {
@@ -434,24 +474,22 @@ function createFarmer() {
 
     farmer.makeBuffer();
 
-    // Increase security in surrounding area
-    vertices.forEach((v) => {
-        const dx = v.x - farmerVertex.x;
-        const dy = v.y - farmerVertex.y;
-        const dist = sqrt(dx * dx + dy * dy);
-        if (dist <= farmerRange && dist > 0) {
-            v.security += 5 / (dist * dist);
-        }
-    });
-
-    // Only update farmer values for vertices that have this farmer in their flooded neighbors
-    // This is more efficient than recalculating all vertices
+    // Increase security in flooded neighbors only
     if (
         farmerVertex.floodedNeighbors &&
         farmerVertex.floodedNeighbors.length > 0
     ) {
+        farmerVertex.floodedNeighbors.forEach((v) => {
+            v.security += 2;
+        });
+
+        // Recalculate merchant values for affected vertices
+        farmerVertex.floodedNeighbors.forEach((v) => {
+            v.updateMerchantValue();
+        });
+
+        // Recalculate farmer values for affected vertices
         farmerVertex.floodedNeighbors.forEach((affectedVertex) => {
-            // Recalculate this vertex's farmer value
             const nearbyVertices = affectedVertex.floodedNeighbors || [];
 
             // Sum farm values in range
@@ -462,18 +500,25 @@ function createFarmer() {
                 }
             });
 
-            // Count farmers in flooded range
+            // Count farmers in flooded neighbors
             let farmerCount = 0;
-            settlements.forEach((s) => {
-                if (s.profession === "Farmer") {
-                    const dx = s.vertex.x - affectedVertex.x;
-                    const dy = s.vertex.y - affectedVertex.y;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq <= farmerValueRadius * farmerValueRadius) {
-                        farmerCount++;
+            if (
+                affectedVertex.floodedNeighbors &&
+                affectedVertex.floodedNeighbors.length > 0
+            ) {
+                settlements.forEach((s) => {
+                    if (s.profession === "Farmer") {
+                        // Check if farmer is in the flooded neighbors
+                        const isInFloodedNeighbors =
+                            affectedVertex.floodedNeighbors.some(
+                                (v) => v.index === s.vertex.index
+                            );
+                        if (isInFloodedNeighbors) {
+                            farmerCount++;
+                        }
                     }
-                }
-            });
+                });
+            }
 
             // Use vertex method to calculate
             affectedVertex.calculateFarmerValue(totalFarmValue, farmerCount);
@@ -543,17 +588,58 @@ function createMerchant() {
         }
     }
 
-    merchant.makeBuffer();
+    // Merchants don't create buffers - they are part of trade networks
 
-    // Increase security in surrounding area
-    vertices.forEach((v) => {
-        const dx = v.x - merchantVertex.x;
-        const dy = v.y - merchantVertex.y;
-        const dist = sqrt(dx * dx + dy * dy);
-        if (dist <= farmerRange && dist > 0) {
-            v.security += 5 / (dist * dist);
-        }
-    });
+    // Increase security in vicinity neighbors only
+    if (
+        merchantVertex.vincinityNeighbors &&
+        merchantVertex.vincinityNeighbors.length > 0
+    ) {
+        merchantVertex.vincinityNeighbors.forEach((v) => {
+            v.security += 1;
+        });
+
+        // Recalculate merchant values for affected vertices
+        merchantVertex.vincinityNeighbors.forEach((v) => {
+            v.updateMerchantValue();
+        });
+
+        // Recalculate farmer values for affected vertices
+        merchantVertex.vincinityNeighbors.forEach((affectedVertex) => {
+            const nearbyVertices = affectedVertex.floodedNeighbors || [];
+
+            // Sum farm values in range
+            let totalFarmValue = 0;
+            nearbyVertices.forEach((v) => {
+                if (v.farmValue > 0) {
+                    totalFarmValue += v.farmValue;
+                }
+            });
+
+            // Count farmers in flooded neighbors
+            let farmerCount = 0;
+            if (
+                affectedVertex.floodedNeighbors &&
+                affectedVertex.floodedNeighbors.length > 0
+            ) {
+                settlements.forEach((s) => {
+                    if (s.profession === "Farmer") {
+                        // Check if farmer is in the flooded neighbors
+                        const isInFloodedNeighbors =
+                            affectedVertex.floodedNeighbors.some(
+                                (v) => v.index === s.vertex.index
+                            );
+                        if (isInFloodedNeighbors) {
+                            farmerCount++;
+                        }
+                    }
+                });
+            }
+
+            // Use vertex method to calculate
+            affectedVertex.calculateFarmerValue(totalFarmValue, farmerCount);
+        });
+    }
 }
 
 function calculateFarmValue() {
@@ -616,6 +702,13 @@ function calculateFarmerValues() {
     }
 
     vertices.forEach((vertex) => {
+        // Calculate vicinity neighbors (smaller range)
+        const vincinityVertices = findVerticesWithinMoveCost(
+            vertex,
+            VINCINITY_MOVE_COST_RANGE
+        );
+        vertex.vincinityNeighbors = vincinityVertices;
+
         // Use movement-cost based flood fill to find nearby vertices
         const nearbyVertices = findVerticesWithinMoveCost(
             vertex,
@@ -633,18 +726,21 @@ function calculateFarmerValues() {
             }
         });
 
-        // Count farmers in radius (still use Euclidean for settlement placement check)
+        // Count farmers in flooded neighbors
         let farmerCount = 0;
-        settlements.forEach((s) => {
-            if (s.profession === "Farmer") {
-                const dx = s.vertex.x - vertex.x;
-                const dy = s.vertex.y - vertex.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq <= farmerValueRadius * farmerValueRadius) {
-                    farmerCount++;
+        if (nearbyVertices.length > 0) {
+            settlements.forEach((s) => {
+                if (s.profession === "Farmer") {
+                    // Check if farmer is in the flooded neighbors
+                    const isInFloodedNeighbors = nearbyVertices.some(
+                        (v) => v.index === s.vertex.index
+                    );
+                    if (isInFloodedNeighbors) {
+                        farmerCount++;
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // Use vertex method to calculate
         vertex.calculateFarmerValue(totalFarmValue, farmerCount);

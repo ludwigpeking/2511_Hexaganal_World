@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Live Kinect Hexagon Map</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                background: #333;
+                color: white;
+                text-align: center;
+            }
+            canvas {
+                border: 1px solid #666;
+                background: #000;
+                margin-top: 10px;
+            }
+            button {
+                padding: 10px 20px;
+                font-size: 16px;
+                cursor: pointer;
+                background: #007acc;
+                color: white;
+                border: none;
+            }
+            #status {
+                color: #aaa;
+                margin: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🔴 Live Kinect Hexagon Mapper</h1>
+        <button onclick="updateFrame()">Fetch Latest Frame</button>
+        <div id="status">Waiting for data...</div>
+        <canvas id="mapCanvas" width="800" height="800"></canvas>
+
+        <script>
+            const MAP_FILE = "map_3.json"; // Ensure this file exists next to the .exe
+            const DEPTH_API = "http://localhost:8080/data";
+            const HEX_SIZE = 300; // Size of the C# Calibration Output
+
+            let hexMapData = null;
+            let depthArray = null;
+            let canvas = document.getElementById("mapCanvas");
+            let ctx = canvas.getContext("2d");
+
+            // Coordinate mapping
+            let bounds = {
+                minX: Infinity,
+                maxX: -Infinity,
+                minY: Infinity,
+                maxY: -Infinity,
+            };
+
+            // 1. Load the JSON Grid Structure
+            async function loadStructure() {
+                try {
+                    const response = await fetch(MAP_FILE);
+                    hexMapData = await response.json();
+                    calculateBounds();
+                    document.getElementById("status").innerText =
+                        "Structure Loaded. Ready to fetch depth.";
+                } catch (e) {
+                    document.getElementById("status").innerText =
+                        "Error loading map JSON: " + e.message;
+                }
+            }
+
+            function calculateBounds() {
+                hexMapData.vertices.forEach((v) => {
+                    bounds.minX = Math.min(bounds.minX, v.x);
+                    bounds.maxX = Math.max(bounds.maxX, v.x);
+                    bounds.minY = Math.min(bounds.minY, v.y);
+                    bounds.maxY = Math.max(bounds.maxY, v.y);
+                });
+            }
+
+            // 2. Fetch Data from C# and Render
+            async function updateFrame() {
+                if (!hexMapData) {
+                    await loadStructure();
+                }
+
+                document.getElementById("status").innerText =
+                    "Fetching depth...";
+                try {
+                    const response = await fetch(DEPTH_API);
+                    depthArray = await response.json(); // Returns flat array [300*300]
+
+                    renderMap();
+                    document.getElementById("status").innerText =
+                        "Rendered at " + new Date().toLocaleTimeString();
+                } catch (e) {
+                    document.getElementById("status").innerText =
+                        "Error connecting to C#: " + e.message;
+                }
+            }
+
+            function renderMap() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Scale to fit canvas
+                const scaleX = canvas.width / (bounds.maxX - bounds.minX);
+                const scaleY = canvas.height / (bounds.maxY - bounds.minY);
+                const scale = Math.min(scaleX, scaleY) * 0.9;
+                const offsetX = 50;
+                const offsetY = 50;
+
+                hexMapData.tiles.forEach((tile) => {
+                    // Calculate average depth for the tile
+                    let depths = tile.vertices.map((v) => getDepthForVertex(v));
+                    let avgDepth =
+                        depths.reduce((a, b) => a + b, 0) / depths.length;
+
+                    // Color based on depth (0=Blue, 200=Red)
+                    ctx.fillStyle = getHeatColor(Math.abs(avgDepth));
+
+                    ctx.beginPath();
+                    tile.vertices.forEach((v, i) => {
+                        const sx = (v.x - bounds.minX) * scale + offsetX;
+                        const sy = (v.y - bounds.minY) * scale + offsetY;
+                        if (i === 0) ctx.moveTo(sx, sy);
+                        else ctx.lineTo(sx, sy);
+                    });
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = "#333";
+                    ctx.stroke();
+
+                    // Optional: Draw text depth
+                    // const cx = (tile.center.x - bounds.minX) * scale + offsetX;
+                    // const cy = (tile.center.y - bounds.minY) * scale + offsetY;
+                    // ctx.fillStyle = "white";
+                    // ctx.fillText(Math.floor(avgDepth), cx-10, cy);
+                });
+            }
+
+            // Map JSON Vertex (Arbitrary) -> C# Grid (0..300)
+            function getDepthForVertex(v) {
+                // Normalize Vertex to 0..1 based on JSON bounds
+                const normX = (v.x - bounds.minX) / (bounds.maxX - bounds.minX);
+                const normY = (v.y - bounds.minY) / (bounds.maxY - bounds.minY);
+
+                // Map to C# Grid Size
+                const imgX = Math.floor(normX * (HEX_SIZE - 1));
+                const imgY = Math.floor(normY * (HEX_SIZE - 1));
+
+                // Lookup in flat array
+                const index = imgY * HEX_SIZE + imgX;
+                return depthArray[index] || 0;
+            }
+
+            function getHeatColor(val) {
+                // 0 = Blue (240), 200 = Red (0)
+                const maxVal = 200;
+                if (val > maxVal) val = maxVal;
+                const ratio = val / maxVal;
+                const hue = 240 - ratio * 240;
+                return `hsl(${hue}, 100%, 50%)`;
+            }
+
+            // Init
+            loadStructure();
+        </script>
+    </body>
+</html>

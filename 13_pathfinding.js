@@ -46,6 +46,16 @@ function pathFinding(start, end, trafficWeight) {
             if (!neighbor) continue;
             if (closeSet.includes(neighbor)) continue;
 
+            // Skip vertices occupied by settlements (but allow as start/end points)
+            // Routes can cross other routes, so occupiedByRoute vertices are allowed
+            if (
+                neighbor.occupiedBy &&
+                neighbor.index !== end.index &&
+                neighbor.index !== start.index
+            ) {
+                continue;
+            }
+
             // Use pre-calculated movement cost
             const moveCost = current.g + neighborData.moveCost;
 
@@ -74,13 +84,17 @@ function pathFinding(start, end, trafficWeight) {
             temp = temp.from;
         }
 
-        // Second pass: add traffic to path vertices and mark as occupied
+        // Second pass: add traffic to path vertices and mark as occupied by route
         node = end;
         while (node) {
             path.unshift(node.index);
             node.traffic += trafficWeight;
             node.trafficValue = node.traffic; // Update traffic value for merchant calculations
-            node.occupied = true; // Mark route vertices as occupied
+            // Mark as occupied by route (unless it's a settlement start/end point)
+            if (!node.occupiedBy) {
+                node.occupied = true;
+                node.occupiedByRoute = true;
+            }
             node = node.from;
         }
 

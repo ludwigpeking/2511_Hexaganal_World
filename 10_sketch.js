@@ -15,6 +15,7 @@ let modeChangeCost = 50;
 let waterTransportFactor = 0.01;
 let steepSlopes = []; // Array of {from: vertex, to: vertex} for debug visualization
 let selectedVertex = null; // For vertex inspection tool
+let canvasCreated = false; // Track if canvas has been created
 
 // Graphics buffers for performance
 let elevationBuffer = null;
@@ -28,9 +29,11 @@ let needsRedrawStatic = true;
 let lastDebugState = {};
 let lastStaticState = {};
 
-function setup() {
-    let canvas = createCanvas(2400, 2400);
-    canvas.parent("canvas-container");
+async function setup() {
+    // Load JSON first to get canvas dimensions
+    await loadDefaultMap();
+
+    // Canvas size is set in processData() after JSON is loaded
     noLoop(); // We'll redraw manually when needed
 
     // Set up event listeners
@@ -61,17 +64,15 @@ function setup() {
     select("#showSteepness").changed(() => redraw());
     select("#showHabitable").changed(() => redraw());
     select("#showOccupied").changed(() => redraw());
+    select("#showTrafficCount").changed(() => redraw());
     select("#showVertexInspector").changed(() => redraw());
     select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
-
-    // Load default map
-    loadDefaultMap();
 }
 
 function draw() {
     if (!topoData) {
-        background(255);
+        background(0);
         return;
     }
 
@@ -97,6 +98,7 @@ function draw() {
     const showSteepness = select("#showSteepness").checked();
     const showHabitable = select("#showHabitable").checked();
     const showOccupied = select("#showOccupied").checked();
+    const showTrafficCount = select("#showTrafficCount").checked();
     const showVertexInspector = select("#showVertexInspector").checked();
 
     // Check if debug layers state changed
@@ -109,6 +111,7 @@ function draw() {
         showSteepness,
         showHabitable,
         showOccupied,
+        showTrafficCount,
     };
     const debugStateChanged =
         JSON.stringify(debugState) !== JSON.stringify(lastDebugState);
@@ -130,7 +133,7 @@ function draw() {
         lastStaticState = staticState;
     }
 
-    background(255);
+    background(0);
 
     // Draw elevation layer (cached)
     if (showElevation) {
@@ -166,6 +169,8 @@ function draw() {
         if (showHabitable)
             drawDebugLayerToBuffer(debugLayersBuffer, "habitable");
         if (showOccupied) drawDebugLayerToBuffer(debugLayersBuffer, "occupied");
+        if (showTrafficCount)
+            drawDebugLayerToBuffer(debugLayersBuffer, "trafficCount");
         needsRedrawDebugLayers = false;
     }
     if (
@@ -176,7 +181,8 @@ function draw() {
         showMerchantValue ||
         showSteepness ||
         showHabitable ||
-        showOccupied
+        showOccupied ||
+        showTrafficCount
     ) {
         image(debugLayersBuffer, 0, 0);
     }
@@ -272,7 +278,7 @@ function keyPressed() {
 async function loadDefaultMap() {
     updateProgress("Loading default map...");
     try {
-        const response = await fetch("results/topo_3.json");
+        const response = await fetch("results/topo_4_1080.json");
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -322,7 +328,7 @@ function updateWaterLevel() {
         invalidateBuffers("all");
         redraw();
     }
-}
+} // a problem, this function does not update the habitable array, farm values and farmer values etc.
 
 function processData() {
     updateProgress("Processing topology data...");
@@ -330,13 +336,39 @@ function processData() {
     // Clear steep slopes from previous data
     steepSlopes = [];
 
+    // Create or resize canvas based on JSON mapping
+    const canvasWidth = topoData.mapping.canvasWidth;
+    const canvasHeight = topoData.mapping.canvasHeight;
+
+    if (!canvasCreated) {
+        // First time: create canvas with correct size
+        let canvas = createCanvas(canvasWidth, canvasHeight);
+        canvas.parent("canvas-container");
+        canvasCreated = true;
+    } else {
+        // Subsequent loads: resize existing canvas
+        resizeCanvas(canvasWidth, canvasHeight);
+    }
+
     const scale = topoData.mapping.hexToCanvasScale;
     const metersPerCanvasPixel = topoData.mapping.metersPerCanvasPixel;
+    const hexCenterX = topoData.mapping.hexCenter.x;
+    const hexCenterY = topoData.mapping.hexCenter.y;
+
+    // Calculate offset to center hex map on canvas
+    const offsetX = canvasWidth / 2 - hexCenterX * scale;
+    const offsetY = canvasHeight / 2 - hexCenterY * scale;
 
     // Create Vertex instances from raw data
     vertices = topoData.vertices.map(
         (rawVertex) => new Vertex(rawVertex, scale, metersPerCanvasPixel)
     );
+
+    // Apply centering offset to all vertices
+    vertices.forEach((vertex) => {
+        vertex.x += offsetX;
+        vertex.y += offsetY;
+    });
 
     // Update topoData.vertices reference to point to new Vertex instances
     topoData.vertices = vertices;
@@ -366,11 +398,11 @@ function processData() {
         vertex.neighbors = validNeighbors;
     });
 
-    // Convert tile centers to canvas pixels
+    // Convert tile centers to canvas pixels (with centering offset)
     topoData.tiles.forEach((tile) => {
         if (tile.center) {
-            tile.centerX = tile.center.x * scale;
-            tile.centerY = tile.center.y * scale;
+            tile.centerX = tile.center.x * scale + offsetX;
+            tile.centerY = tile.center.y * scale + offsetY;
         }
     });
 
@@ -658,6 +690,42 @@ function drawVertexInspector() {
 
     const v = selectedVertex;
 
+    // Highlight flooded neighbors first (underneath)
+    if (v.floodedNeighbors && v.floodedNeighbors.length > 0) {
+        fill(100, 200, 255, 100); // Light blue transparent
+        noStroke();
+        v.floodedNeighbors.forEach((floodedV) => {
+            if (
+                floodedV.surroundingTiles &&
+                floodedV.surroundingTiles.length > 0
+            ) {
+                beginShape();
+                floodedV.surroundingTiles.forEach((tile) => {
+                    vertex(tile.centerX, tile.centerY);
+                });
+                endShape(CLOSE);
+            }
+        });
+    }
+
+    // Highlight vicinity neighbors on top (more visible)
+    if (v.vincinityNeighbors && v.vincinityNeighbors.length > 0) {
+        fill(255, 200, 100, 120); // Orange transparent
+        noStroke();
+        v.vincinityNeighbors.forEach((vicinityV) => {
+            if (
+                vicinityV.surroundingTiles &&
+                vicinityV.surroundingTiles.length > 0
+            ) {
+                beginShape();
+                vicinityV.surroundingTiles.forEach((tile) => {
+                    vertex(tile.centerX, tile.centerY);
+                });
+                endShape(CLOSE);
+            }
+        });
+    }
+
     // Highlight the selected vertex
     if (v.surroundingTiles && v.surroundingTiles.length > 0) {
         fill(255, 255, 0, 150);
@@ -679,19 +747,21 @@ function drawVertexInspector() {
     const props = [
         `Index: ${v.index}`,
         `Pos: (${v.x.toFixed(0)}, ${v.y.toFixed(0)})`,
-        `Hex: (${v.hexX}, ${v.hexY})`,
-        `Elevation: ${v.elevation.toFixed(1)}m`,
+        // `Hex: (${v.hexX}, ${v.hexY})`,
+        `Elevation: ${v.elevation.toFixed(0)}m`,
         `Water: ${v.water}`,
         `Occupied: ${v.occupied}`,
         `Habitable: ${v.habitable}`,
-        `Defense: ${v.defense.toFixed(1)}`,
-        `Security: ${v.security.toFixed(2)}`,
-        `Farm Value: ${v.farmValue.toFixed(2)}`,
-        `Farmer Value: ${v.farmerValue.toFixed(2)}`,
-        `Merchant Value: ${v.merchantValue.toFixed(2)}`,
+        `Defense: ${v.defense.toFixed(0)}`,
+        `Security: ${v.security.toFixed(0)}`,
+        `Farm Value: ${v.farmValue.toFixed(0)}`,
+        `Farmer Value: ${v.farmerValue.toFixed(0)}`,
+        `Merchant Value: ${v.merchantValue.toFixed(0)}`,
         `Traffic: ${v.traffic}`,
-        `Steepness: ${v.steepness.toFixed(3)}`,
+        `Steepness: ${v.steepness.toFixed(0)}`,
         `Neighbors: ${v.neighbors.length}`,
+        `Vicinity: ${v.vincinityNeighbors ? v.vincinityNeighbors.length : 0}`,
+        `Flooded: ${v.floodedNeighbors ? v.floodedNeighbors.length : 0}`,
     ];
 
     // Draw property panel
@@ -715,10 +785,10 @@ function drawVertexInspector() {
     }
 
     // Draw panel background
-    fill(255, 255, 255, 240);
-    stroke(0);
-    strokeWeight(2);
-    rect(finalPanelX, finalPanelY, panelWidth, panelHeight, 5);
+    // fill(255, 255, 255, 240);
+    // stroke(0);
+    // strokeWeight(2);
+    // rect(finalPanelX, finalPanelY, panelWidth, panelHeight, 5);
 
     // Draw property text
     fill(0);
@@ -733,7 +803,7 @@ function drawVertexInspector() {
     if (v.neighbors.length > 0) {
         const trafficInfo = v.neighbors
             .filter((n) => n.trafficCount > 0)
-            .map((n) => `  → ${n.vertexIndex}: ${n.trafficCount.toFixed(1)}`);
+            .map((n) => `  → ${n.vertexIndex}: ${n.trafficCount.toFixed(0)}`);
 
         if (trafficInfo.length > 0) {
             const trafficPanelY = finalPanelY + panelHeight + 5;
@@ -827,10 +897,8 @@ function addLordSettlement() {
         return;
     }
 
-    // Initialize habitable if not already done
-    if (habitable.length === 0) {
-        initializeHabitable();
-    }
+    // Always repopulate habitable array to get current occupation state
+    populateHabitableArray();
 
     createLord();
     updateProgress(`Lord created at step ${simulationStep}`);
@@ -845,10 +913,8 @@ function addFarmerSettlement() {
         return;
     }
 
-    // Initialize habitable if not already done
-    if (habitable.length === 0) {
-        initializeHabitable();
-    }
+    // Always repopulate habitable array to get current occupation state
+    populateHabitableArray();
 
     if (habitable.length === 0) {
         alert("No habitable locations available!");
@@ -868,10 +934,8 @@ function addMerchantSettlement() {
         return;
     }
 
-    // Initialize habitable if not already done
-    if (habitable.length === 0) {
-        initializeHabitable();
-    }
+    // Always repopulate habitable array to get current occupation state
+    populateHabitableArray();
 
     if (habitable.length === 0) {
         alert("No habitable locations available!");
@@ -961,6 +1025,8 @@ function drawDebugLayerToBuffer(buffer, layerType) {
         drawHabitableLayerToBuffer(buffer);
     } else if (layerType === "occupied") {
         drawOccupiedLayerToBuffer(buffer);
+    } else if (layerType === "trafficCount") {
+        drawTrafficCountLayerToBuffer(buffer);
     }
 
     buffer.pop();
@@ -1318,4 +1384,54 @@ function drawOccupiedLayerToBuffer(buffer) {
             buffer.endShape(CLOSE);
         }
     });
+}
+
+function drawTrafficCountLayerToBuffer(buffer) {
+    if (!vertices || vertices.length === 0) return;
+
+    // Calculate total traffic count for each vertex (sum of all edge traffic)
+    const vertexTrafficCounts = new Map();
+    let maxTrafficCount = 0;
+
+    vertices.forEach((vtx) => {
+        let totalTrafficCount = 0;
+        vtx.neighbors.forEach((neighbor) => {
+            if (neighbor.trafficCount) {
+                totalTrafficCount += neighbor.trafficCount;
+            }
+        });
+        vertexTrafficCounts.set(vtx.index, totalTrafficCount);
+        if (totalTrafficCount > maxTrafficCount) {
+            maxTrafficCount = totalTrafficCount;
+        }
+    });
+
+    if (maxTrafficCount === 0) return; // Nothing to show
+
+    buffer.colorMode(HSB);
+    vertices.forEach((vtx) => {
+        const trafficCount = vertexTrafficCounts.get(vtx.index);
+        if (
+            trafficCount > 0 &&
+            vtx.surroundingTiles &&
+            vtx.surroundingTiles.length > 0
+        ) {
+            buffer.noStroke();
+            // Blue to red gradient based on traffic intensity
+            let hue = map(trafficCount, 0, maxTrafficCount, 240, 0);
+            buffer.fill(hue, 100, 100, 150);
+
+            buffer.beginShape();
+            vtx.surroundingTiles.forEach((tile) => {
+                buffer.vertex(tile.centerX, tile.centerY);
+            });
+            buffer.endShape(CLOSE);
+
+            buffer.fill(0);
+            buffer.textAlign(CENTER, CENTER);
+            buffer.textSize(12);
+            buffer.text(round(trafficCount * 10) / 10, vtx.x, vtx.y);
+        }
+    });
+    buffer.colorMode(RGB);
 }

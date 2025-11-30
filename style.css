@@ -2,28 +2,87 @@ html,
 body {
     margin: 0;
     padding: 0;
-    font-size: 24px;
+    font-size: 16px;
     font-family: sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+body {
+    display: flex;
+    flex-direction: row;
 }
 
 button,
 input {
-    font-size: 24px;
+    font-size: 14px;
 }
 
 input[type="checkbox"] {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
-#controls > div {
-    margin-bottom: 5px;
+#canvas-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    background-color: #f0f0f0;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 canvas {
     display: block;
+    height: 100vh !important;
+    width: auto !important;
+}
+
+#right-panel {
+    width: 640px;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    overflow-y: auto;
+}
+
+#controls {
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+h1 {
+    margin: 0 0 15px 0;
+    font-size: 20px;
+}
+
+h3 {
+    margin: 15px 0 10px 0;
+    font-size: 16px;
+}
+
+#controls > div {
+    margin-bottom: 10px;
+    padding: 8px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+}
+
+#controls label {
+    display: inline-block;
+    margin-right: 10px;
+    white-space: nowrap;
 }
 
 input[type="file"] {
     display: none;
+}
+
+#progress {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e8f4f8;
+    border-radius: 4px;
+    font-size: 14px;
 }
