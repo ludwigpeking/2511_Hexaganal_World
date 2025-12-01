@@ -44,6 +44,7 @@ async function setup() {
     select("#fileInput").elt.addEventListener("change", loadCustomFile);
 
     select("#createRouteBtn").mousePressed(createRandomRoute);
+    select("#randomTravelBtn").mousePressed(createRandomTravel);
     select("#addLordBtn").mousePressed(addLordSettlement);
     select("#addFarmerBtn").mousePressed(addFarmerSettlement);
     select("#addMerchantBtn").mousePressed(addMerchantSettlement);
@@ -62,6 +63,7 @@ async function setup() {
     select("#showFarmerValue").changed(() => redraw());
     select("#showMerchantValue").changed(() => redraw());
     select("#showSteepness").changed(() => redraw());
+    select("#showSlopeDirection").changed(() => redraw());
     select("#showHabitable").changed(() => redraw());
     select("#showOccupied").changed(() => redraw());
     select("#showTrafficCount").changed(() => redraw());
@@ -96,6 +98,7 @@ function draw() {
     const showFarmerValue = select("#showFarmerValue").checked();
     const showMerchantValue = select("#showMerchantValue").checked();
     const showSteepness = select("#showSteepness").checked();
+    const showSlopeDirection = select("#showSlopeDirection").checked();
     const showHabitable = select("#showHabitable").checked();
     const showOccupied = select("#showOccupied").checked();
     const showTrafficCount = select("#showTrafficCount").checked();
@@ -109,6 +112,7 @@ function draw() {
         showFarmerValue,
         showMerchantValue,
         showSteepness,
+        showSlopeDirection,
         showHabitable,
         showOccupied,
         showTrafficCount,
@@ -166,6 +170,8 @@ function draw() {
             drawDebugLayerToBuffer(debugLayersBuffer, "merchantValue");
         if (showSteepness)
             drawDebugLayerToBuffer(debugLayersBuffer, "steepness");
+        if (showSlopeDirection)
+            drawDebugLayerToBuffer(debugLayersBuffer, "slopeDirection");
         if (showHabitable)
             drawDebugLayerToBuffer(debugLayersBuffer, "habitable");
         if (showOccupied) drawDebugLayerToBuffer(debugLayersBuffer, "occupied");
@@ -180,6 +186,7 @@ function draw() {
         showFarmerValue ||
         showMerchantValue ||
         showSteepness ||
+        showSlopeDirection ||
         showHabitable ||
         showOccupied ||
         showTrafficCount
@@ -740,7 +747,7 @@ function drawVertexInspector() {
     // Draw a circle at vertex center
     fill(255, 255, 0);
     stroke(0);
-    strokeWeight(2);
+    strokeWeight(1);
     circle(v.x, v.y, 15);
 
     // Prepare property text
@@ -1021,6 +1028,8 @@ function drawDebugLayerToBuffer(buffer, layerType) {
         drawMerchantValueLayerToBuffer(buffer);
     } else if (layerType === "steepness") {
         drawSteepnessLayerToBuffer(buffer);
+    } else if (layerType === "slopeDirection") {
+        drawSlopeDirectionLayerToBuffer(buffer);
     } else if (layerType === "habitable") {
         drawHabitableLayerToBuffer(buffer);
     } else if (layerType === "occupied") {
@@ -1067,7 +1076,12 @@ function drawTrafficHeatmapToBuffer(buffer, scale) {
 
 function drawRoutesToBuffer(buffer, scale) {
     routes.forEach((route) => {
-        buffer.stroke(255, 255, 0, 204);
+        // Random travel routes in red, normal routes in yellow
+        if (route.isRandomTravel) {
+            buffer.stroke(255, 0, 0, 204); // Red for random travel
+        } else {
+            buffer.stroke(255, 255, 0, 204); // Yellow for normal routes
+        }
         buffer.strokeWeight(max(2, route.trafficWeight));
         buffer.strokeCap(ROUND);
         buffer.strokeJoin(ROUND);
@@ -1344,6 +1358,43 @@ function drawSteepnessLayerToBuffer(buffer) {
         }
     });
     buffer.colorMode(RGB);
+}
+
+function drawSlopeDirectionLayerToBuffer(buffer) {
+    if (!vertices || vertices.length === 0) return;
+
+    buffer.stroke(255, 0, 255); // Magenta arrows
+    buffer.strokeWeight(1);
+    buffer.fill(255, 0, 255);
+
+    vertices.forEach((vtx) => {
+        if (vtx.slopeDirection !== null && vtx.slopeDirectionMagnitude > 0.01) {
+            const arrowLength =
+                10 * Math.min(vtx.slopeDirectionMagnitude / 0.1, 2);
+            const endX = vtx.x + Math.cos(vtx.slopeDirection) * arrowLength;
+            const endY = vtx.y + Math.sin(vtx.slopeDirection) * arrowLength;
+
+            // Draw arrow line
+            buffer.line(vtx.x, vtx.y, endX, endY);
+
+            // Draw arrowhead
+            const arrowHeadSize = 3;
+            const angle1 = vtx.slopeDirection + Math.PI * 0.75;
+            const angle2 = vtx.slopeDirection - Math.PI * 0.75;
+            buffer.line(
+                endX,
+                endY,
+                endX + Math.cos(angle1) * arrowHeadSize,
+                endY + Math.sin(angle1) * arrowHeadSize
+            );
+            buffer.line(
+                endX,
+                endY,
+                endX + Math.cos(angle2) * arrowHeadSize,
+                endY + Math.sin(angle2) * arrowHeadSize
+            );
+        }
+    });
 }
 
 function drawHabitableLayerToBuffer(buffer) {

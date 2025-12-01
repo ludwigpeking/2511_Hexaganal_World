@@ -143,20 +143,49 @@ class Vertex {
     calculateSteepness() {
         if (!this.neighbors || this.neighbors.length === 0) {
             this.steepness = 0;
+            this.slopeDirection = null;
             return;
         }
 
         let totalSlope = 0;
         let validNeighbors = 0;
+        let sumX = 0;
+        let sumY = 0;
 
         this.neighbors.forEach((neighbor) => {
             if (neighbor.slope !== undefined) {
                 totalSlope += Math.abs(neighbor.slope);
                 validNeighbors++;
+
+                // Calculate slope direction (gradient vector)
+                const neighborVertex = vertices.find(
+                    (v) => v.index === neighbor.vertexIndex
+                );
+                if (neighborVertex) {
+                    const dx = neighborVertex.x - this.x;
+                    const dy = neighborVertex.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        // Weight by slope magnitude, pointing downhill
+                        // Negative weight since positive slope means neighbor is higher
+                        const weight = -neighbor.slope; 
+                        sumX += (dx / dist) * weight;
+                        sumY += (dy / dist) * weight;
+                    }
+                }
             }
         });
 
         this.steepness = validNeighbors > 0 ? totalSlope / validNeighbors : 0;
+
+        // Store slope direction as angle in radians (pointing downhill)
+        if (sumX !== 0 || sumY !== 0) {
+            this.slopeDirection = Math.atan2(sumY, sumX);
+            this.slopeDirectionMagnitude = Math.sqrt(sumX * sumX + sumY * sumY);
+        } else {
+            this.slopeDirection = null;
+            this.slopeDirectionMagnitude = 0;
+        }
     }
 
     // Calculate terrain-based movement cost for each neighbor

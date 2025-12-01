@@ -2,13 +2,14 @@
 let routes = [];
 
 class Route {
-    constructor(start, end, trafficWeight, path) {
+    constructor(start, end, trafficWeight, path, isRandomTravel = false) {
         this.start = start;
         this.end = end;
         this.trafficWeight = trafficWeight;
         this.path = path; // Array of vertex indices
         this.totalDistance = 0;
         this.totalElevationGain = 0;
+        this.isRandomTravel = isRandomTravel;
     }
 }
 
@@ -48,12 +49,24 @@ function pathFinding(start, end, trafficWeight) {
 
             // Skip vertices occupied by settlements (but allow as start/end points)
             // Routes can cross other routes, so occupiedByRoute vertices are allowed
-            if (
-                neighbor.occupiedBy &&
-                neighbor.index !== end.index &&
-                neighbor.index !== start.index
-            ) {
-                continue;
+            // Castle annexes are blocked UNLESS the path is from/to the lord itself
+            if (neighbor.occupiedBy) {
+                // Check if it's a regular settlement occupation
+                if (
+                    neighbor.index !== end.index &&
+                    neighbor.index !== start.index
+                ) {
+                    continue;
+                }
+            } else if (neighbor.castleAnnex) {
+                // Check if it's a castle annex - only allow if path involves the lord
+                const isPathToFromLord =
+                    (start.occupiedBy &&
+                        start.occupiedBy === neighbor.castleAnnex) ||
+                    (end.occupiedBy && end.occupiedBy === neighbor.castleAnnex);
+                if (!isPathToFromLord && neighbor.index !== end.index) {
+                    continue;
+                }
             }
 
             // Use pre-calculated movement cost
@@ -90,11 +103,6 @@ function pathFinding(start, end, trafficWeight) {
             path.unshift(node.index);
             node.traffic += trafficWeight;
             node.trafficValue = node.traffic; // Update traffic value for merchant calculations
-            // Mark as occupied by route (unless it's a settlement start/end point)
-            if (!node.occupiedBy) {
-                node.occupied = true;
-                node.occupiedByRoute = true;
-            }
             node = node.from;
         }
 
@@ -158,6 +166,22 @@ function pathFinding(start, end, trafficWeight) {
                 }
             }
         }
+
+        // Fifth pass: mark ALL vertices as occupied if sum of edge trafficCount >= 12
+        // This must check all vertices, not just path vertices, because trafficCount accumulates
+        topoData.vertices.forEach((vertex) => {
+            if (!vertex.occupiedBy) {
+                // Calculate sum of all edge traffic counts (same as Traffic Count debug layer)
+                const totalEdgeTraffic = vertex.neighbors.reduce(
+                    (sum, n) => sum + (n.trafficCount || 0),
+                    0
+                );
+                if (totalEdgeTraffic >= 12) {
+                    vertex.occupied = true;
+                    vertex.occupiedByRoute = true;
+                }
+            }
+        });
 
         // Recalculate movement costs to apply traffic reduction
         calculateMovementCosts();
@@ -242,6 +266,48 @@ function createRandomRoute() {
         redraw();
     } else {
         updateProgress("Failed to find route!");
+    }
+}
+
+function createRandomTravel() {
+    if (!settlements || settlements.length < 2) {
+        alert("Need at least 2 settlements for random travel!");
+        return;
+    }
+
+    // Pick two random settlements
+    const settlement1 = settlements[floor(random(settlements.length))];
+    let settlement2;
+    do {
+        settlement2 = settlements[floor(random(settlements.length))];
+    } while (settlement1 === settlement2);
+
+    const start = settlement1.vertex;
+    const end = settlement2.vertex;
+    const trafficWeight = 2;
+
+    updateProgress(
+        `Random travel from ${settlement1.profession} to ${settlement2.profession}...`
+    );
+
+    const path = pathFinding(start, end, trafficWeight);
+
+    if (path) {
+        const route = new Route(start, end, trafficWeight, path, true);
+        calculateRouteStats(route);
+        routes.push(route);
+
+        updateProgress(
+            `Travel route created! Length: ${
+                path.length
+            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
+        );
+        updateRouteStats();
+        if (typeof invalidateBuffers !== "undefined")
+            invalidateBuffers("static");
+        redraw();
+    } else {
+        updateProgress("Failed to find travel route!");
     }
 }
 

@@ -26,8 +26,6 @@ class Settlement {
         this.nr = settlementNr++;
         this.trafficWeight =
             profession === "Lord" ? 6 : profession === "Merchant" ? 2 : 1;
-        this.buffer =
-            profession === "Lord" ? 2 : profession === "Farmer" ? 1 : 0;
         this.color = this.getProfessionColor();
 
         vertex.occupied = true;
@@ -37,19 +35,6 @@ class Settlement {
 
         // Remove from habitable
         habitable = habitable.filter((v) => v.index !== vertex.index);
-
-        // Mark neighbors as occupied (but not for merchants)
-        if (profession !== "Merchant") {
-            vertex.neighbors.forEach((neighbor) => {
-                const neighborVertex = vertices.find(
-                    (v) => v.index === neighbor.vertexIndex
-                );
-                if (neighborVertex) {
-                    neighborVertex.occupied = true;
-                    neighborVertex.occupiedByRoute = false; // Neighbors are buffers, not route-occupied
-                }
-            });
-        }
     }
 
     getProfessionColor() {
@@ -73,71 +58,108 @@ class Settlement {
         }
     }
 
-    makeBuffer() {
-        // Mark vertices within buffer distance as occupied and not habitable
-        vertices.forEach((v) => {
-            const dx = v.x - this.vertex.x;
-            const dy = v.y - this.vertex.y;
-            const distance = sqrt(dx * dx + dy * dy);
-
-            if (distance <= this.buffer * 20) {
-                // buffer * approximate vertex spacing
-                v.buffer = true;
-                v.occupied = true; // Buffer zones are also occupied
+    createAnnexes() {
+        // Lord: Mark vicinity neighbors as castle annexes (occupied, blocked from pathfinding)
+        if (
+            this.vertex.vincinityNeighbors &&
+            this.vertex.vincinityNeighbors.length > 0
+        ) {
+            this.vertex.vincinityNeighbors.forEach((v) => {
+                v.occupied = true;
+                v.castleAnnex = this; // Reference to the lord that owns this annex
                 v.habitable = false;
                 habitable = habitable.filter((hab) => hab.index !== v.index);
-            }
-        });
+            });
+        }
+    }
+
+    createGardens() {
+        // Farmer: Mark vicinity neighbors as gardens (not occupied, open to pathfinding)
+        // Only create gardens on unoccupied vertices
+        if (
+            this.vertex.vincinityNeighbors &&
+            this.vertex.vincinityNeighbors.length > 0
+        ) {
+            this.vertex.vincinityNeighbors.forEach((v) => {
+                if (!v.occupied) {
+                    console.log(v);
+                    v.garden = this; // Reference to the farmer that owns this garden
+                    // Do NOT mark as occupied - gardens are open to pathfinding and settlement
+                }
+            });
+        }
     }
 
     show() {
         const v = this.vertex;
         colorMode(RGB);
-        noStroke();
-        fill(this.color.r, this.color.g, this.color.b, 150);
 
-        // Draw polygon using surrounding tile centers
+        // Draw castle annexes for Lord (solid white)
+        if (
+            this.profession === "Lord" &&
+            v.vincinityNeighbors &&
+            v.vincinityNeighbors.length > 0
+        ) {
+            noStroke();
+            fill(255, 255, 255); // Solid white for annexes
+            v.vincinityNeighbors.forEach((annexVertex) => {
+                if (
+                    annexVertex.surroundingTiles &&
+                    annexVertex.surroundingTiles.length > 0
+                ) {
+                    beginShape();
+                    annexVertex.surroundingTiles.forEach((tile) => {
+                        vertex(tile.centerX, tile.centerY);
+                    });
+                    endShape(CLOSE);
+                }
+            });
+        }
+
+        // Draw gardens for Farmer (green)
+        if (
+            this.profession === "Farmer" &&
+            v.vincinityNeighbors &&
+            v.vincinityNeighbors.length > 0
+        ) {
+            noStroke();
+            fill(50, 255, 120); // Green for gardens
+            v.vincinityNeighbors.forEach((gardenVertex) => {
+                if (
+                    gardenVertex.garden === this &&
+                    gardenVertex.surroundingTiles &&
+                    gardenVertex.surroundingTiles.length > 0
+                ) {
+                    beginShape();
+                    gardenVertex.surroundingTiles.forEach((tile) => {
+                        vertex(tile.centerX, tile.centerY);
+                    });
+                    endShape(CLOSE);
+                }
+            });
+        }
+
+        // Draw main settlement polygon
+        if (this.profession === "Lord") {
+            // Lord: solid white with black stroke
+            stroke(0);
+            strokeWeight(2);
+            fill(255, 255, 255);
+        } else {
+            // Farmer and Merchant: colored polygon
+            noStroke();
+            fill(this.color.r, this.color.g, this.color.b);
+        }
+
         beginShape();
         v.surroundingTiles.forEach((tile) => {
             vertex(tile.centerX, tile.centerY);
         });
         endShape(CLOSE);
-
-        // Draw symbol on top
-        this.drawSymbol();
     }
 
     drawSymbol() {
-        const v = this.vertex;
-        strokeWeight(2);
-        stroke(0);
-        fill(this.color.r, this.color.g, this.color.b);
-
-        switch (this.profession) {
-            case "Lord":
-                // Castle symbol
-                rectMode(CENTER);
-                rect(v.x, v.y, 20, 20);
-                circle(v.x - 10, v.y - 10, 8);
-                circle(v.x + 10, v.y - 10, 8);
-                circle(v.x - 10, v.y + 10, 8);
-                circle(v.x + 10, v.y + 10, 8);
-                circle(v.x, v.y, 12);
-                rectMode(CORNER);
-                break;
-            case "Farmer":
-                // House symbol
-                rectMode(CENTER);
-                rect(v.x, v.y, 12, 12);
-                rectMode(CORNER);
-                break;
-            case "Merchant":
-                // Shop symbol
-                rectMode(CENTER);
-                rect(v.x, v.y, 10, 14);
-                rectMode(CORNER);
-                break;
-        }
+        // No longer drawing symbols - settlements are shown as polygons
     }
 }
 
@@ -230,7 +252,8 @@ function initializeHabitable() {
         vertex.habitable = !vertex.water; // Water vertices are not habitable
 
         // Only add to habitable if both habitable AND not occupied
-        if (vertex.habitable && !vertex.occupied) {
+        // occupiedByRoute flag is only set for vertices ON routes with traffic >= 12
+        if (vertex.habitable && !vertex.occupied && !vertex.occupiedByRoute) {
             habitable.push(vertex);
         }
     });
@@ -248,6 +271,7 @@ function populateHabitableArray() {
     habitable = [];
     vertices.forEach((vertex) => {
         // Only add to habitable if habitable AND not occupied by anything (settlements or routes)
+        // occupiedByRoute flag is only set for vertices ON routes with traffic >= 12
         if (vertex.habitable && !vertex.occupied && !vertex.occupiedByRoute) {
             habitable.push(vertex);
         }
@@ -353,7 +377,7 @@ function createLord() {
 
     console.log("Lord settlement created");
 
-    lord.makeBuffer();
+    lord.createAnnexes();
 
     // Create routes to trade destinations if they exist
     if (tradeDestination1) {
@@ -472,24 +496,24 @@ function createFarmer() {
         }
     }
 
-    farmer.makeBuffer();
+    farmer.createGardens();
 
-    // Increase security in flooded neighbors only
+    // Increase security in vicinity neighbors only
     if (
-        farmerVertex.floodedNeighbors &&
-        farmerVertex.floodedNeighbors.length > 0
+        farmerVertex.vincinityNeighbors &&
+        farmerVertex.vincinityNeighbors.length > 0
     ) {
-        farmerVertex.floodedNeighbors.forEach((v) => {
+        farmerVertex.vincinityNeighbors.forEach((v) => {
             v.security += 2;
         });
 
         // Recalculate merchant values for affected vertices
-        farmerVertex.floodedNeighbors.forEach((v) => {
+        farmerVertex.vincinityNeighbors.forEach((v) => {
             v.updateMerchantValue();
         });
 
         // Recalculate farmer values for affected vertices
-        farmerVertex.floodedNeighbors.forEach((affectedVertex) => {
+        farmerVertex.vincinityNeighbors.forEach((affectedVertex) => {
             const nearbyVertices = affectedVertex.floodedNeighbors || [];
 
             // Sum farm values in range
@@ -810,6 +834,8 @@ function clearSettlements() {
         vertices.forEach((v) => {
             v.occupied = false;
             v.buffer = false;
+            v.castleAnnex = null;
+            v.garden = null;
             v.habitable = !v.water;
             v.defense = 0;
             v.farmValue = 0;
