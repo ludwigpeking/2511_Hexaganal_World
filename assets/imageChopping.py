@@ -15,8 +15,9 @@ output_size = (80, 80)
 
 def mirror_filename(filename):
     """
-    Mirror the filename: 1234 becomes 2143
-    Swaps positions: [0,1,2,3] -> [1,0,3,2]
+    Mirror the filename horizontally
+    Order: TL(0), TR(1), BR(2), BL(3)
+    Horizontal mirror: [0,1,2,3] -> [1,0,3,2]
     """
     name, ext = os.path.splitext(filename)
     if len(name) >= 4:
@@ -34,8 +35,9 @@ def mirror_filename(filename):
 
 def rotate_filename(filename):
     """
-    Rotate the filename clockwise: 1234 becomes 3142
-    Rotates positions: [0,1,2,3] -> [2,0,3,1]
+    Rotate the filename clockwise 90 degrees
+    Order: TL(0), TR(1), BR(2), BL(3)
+    Clockwise rotation: [0,1,2,3] -> [3,0,1,2]
     """
     name, ext = os.path.splitext(filename)
     if len(name) >= 4:
@@ -43,10 +45,11 @@ def rotate_filename(filename):
         if '_' in name:
             prefix, base = name.split('_', 1)
             if len(base) >= 4:
-                rotated = base[2] + base[0] + base[3] + base[1] + base[4:]
+                # Clockwise 90°: [0,1,2,3] -> [3,0,1,2]
+                rotated = base[3] + base[0] + base[1] + base[2] + base[4:]
                 return f"{prefix}_r{rotated}{ext}"
         else:
-            rotated = name[2] + name[0] + name[3] + name[1] + name[4:]
+            rotated = name[3] + name[0] + name[1] + name[2] + name[4:]
             return f"r{rotated}{ext}"
     return filename
 
@@ -92,9 +95,9 @@ file_names_part1 = [
 # part 2: 2 axial symmetry, - mirror to exhaust
 file_names_part2 = [
     # row 2
-    ["wrrw.png", "w11w.png", "w22w.png", "wccw.png"],
+    ["wrwr.png", "w1w1.png", "w2w2.png", "wcwc.png"],
     # row 3
-    ["r11r.png", "r22r.png", "rccr.png", "1221.png", "1cc1.png", "2cc2.png"]
+    ["r1r1.png", "r2r2.png", "rcrc.png", "1212.png", "1c1c.png", "2c2c.png"]
 ]
 
 # part 3: 1 axial symmetry, -rotate 3 times to exhaust
@@ -104,41 +107,41 @@ file_names_part3 = [
     # row 5
     ["1122.png", "11cc.png", "22cc.png"],
     # row 6
-    ["wwwr.png", "www1.png", "www2.png", "wwwc.png", "rrrw.png", "rrr1.png", "rrr2.png", "rrrc.png"],
+    ["wwrw.png", "ww1w.png", "ww2w.png", "wwcw.png", "rrwr.png", "rr1r.png", "rr2r.png", "rrcr.png"],
     # row 7
-    ["111w.png", "111r.png", "1112.png", "111c.png", "222w.png", "222r.png", "2221.png", "222c.png"],
+    ["11w1.png", "11r1.png", "1121.png", "11c1.png", "22w2.png", "22r2.png", "2212.png", "22c2.png"],
     # row 8
-    ["cccw.png", "cccr.png", "ccc1.png", "ccc2.png"],
+    ["ccwc.png", "ccrc.png", "cc1c.png", "cc2c.png"],
     # row 9
-    ["w1rw.png", "w2rw.png", "wcrw.png", "w21w.png", "wc1w.png", "wc2w.png"],
+    ["w1wr.png", "w2wr.png", "wcwr.png", "w2w1.png", "wcw1.png", "wcw2.png"],
     # row 10
-    ["r1wr.png", "r2wr.png", "rcwr.png", "r21r.png", "rc1r.png", "rc2r.png"],
+    ["r1rw.png", "r2rw.png", "rcrw.png", "r2r1.png", "rcr1.png", "rcr2.png"],
     # row 11
-    ["1rw1.png", "12w1.png", "1cw1.png", "12r1.png", "1cr1.png", "1c21.png"],
+    ["1r1w.png", "121w.png", "1c1w.png", "121r.png", "1c1r.png", "1c12.png"],
     # row 12
-    ["2rw2.png", "21w2.png", "2cw2.png", "21r2.png", "2cr2.png", "2c12.png"],
+    ["2r2w.png", "212w.png", "2c2w.png", "212r.png", "2c2r.png", "2c21.png"],
     # row 13
-    ["crwc.png", "c1wc.png", "c2wc.png", "c1rc.png", "c2rc.png", "c21c.png"]
+    ["crcw.png", "c1cw.png", "c2cw.png", "c1cr.png", "c2cr.png", "c2c1.png"]
 ]
 
 # part 4: no symmetry, -rotate 3 times and each mirror
 file_names_part4 = [
     # row 14
-    ["wr12.png", "wr1c.png", "wrc2.png", "wc12.png", "cr12.png"],
-    # row 15
-    ["w21r.png", "wc1r.png", "w2cr.png", "w21c.png", "c21r.png"],
-    # row 16
     ["wr21.png", "wrc1.png", "wr2c.png", "wc21.png", "cr21.png"],
+    # row 15
+    ["w2r1.png", "wcr1.png", "w2rc.png", "w2c1.png", "c2r1.png"],
+    # row 16
+    ["wr12.png", "wr1c.png", "wrc2.png", "wc12.png", "cr12.png"],
     # row 17
-    ["wwr1.png", "wwr2.png", "wwrc.png", "ww12.png", "ww1c.png", "ww2c.png"],
+    ["ww1r.png", "ww2r.png", "wwcr.png", "ww21.png", "wwc1.png", "wwc2.png"],
     # row 18
-    ["rrw1.png", "rrw2.png", "rrwc.png", "rr12.png", "rr1c.png", "rr2c.png"],
+    ["rr1w.png", "rr2w.png", "rrcw.png", "rr21.png", "rrc1.png", "rrc2.png"],
     # row 19
-    ["11wr.png", "11w2.png", "11wc.png", "11r2.png", "11rc.png", "112c.png"],
+    ["11rw.png", "112w.png", "11cw.png", "112r.png", "11cr.png", "11c2.png"],
     # row 20
-    ["22wr.png", "22w1.png", "22wc.png", "22r1.png", "22rc.png", "221c.png"],
+    ["22rw.png", "221w.png", "22cw.png", "221r.png", "22cr.png", "22c1.png"],
     # row 21
-    ["ccwr.png", "ccw1.png", "ccw2.png", "ccr1.png", "ccr2.png", "cc12.png"]
+    ["ccrw.png", "cc1w.png", "cc2w.png", "cc1r.png", "cc2r.png", "cc21.png"]
 ]
 
 # Combine all parts with their folder destinations

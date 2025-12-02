@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Kinect Depth Monitor</title>
+        <style>
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #1e1e1e;
+                color: #f0f0f0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin: 0;
+                padding: 20px;
+            }
+
+            h1 {
+                margin-bottom: 10px;
+            }
+
+            .container {
+                background-color: #2d2d2d;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+                text-align: center;
+            }
+
+            canvas {
+                border: 2px solid #444;
+                background-color: #000;
+                image-rendering: pixelated; /* Keeps pixels sharp */
+                max-width: 100%;
+                height: auto;
+            }
+
+            .status-bar {
+                margin-top: 15px;
+                padding: 10px;
+                background-color: #333;
+                border-radius: 4px;
+                font-family: monospace;
+                color: #aaa;
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            .status-active {
+                color: #4caf50;
+                font-weight: bold;
+            }
+            .status-error {
+                color: #f44336;
+                font-weight: bold;
+            }
+
+            .legend {
+                display: flex;
+                justify-content: space-between;
+                margin-top: 10px;
+                background: linear-gradient(
+                    to right,
+                    blue,
+                    cyan,
+                    lime,
+                    yellow,
+                    red
+                );
+                height: 20px;
+                width: 100%;
+                border-radius: 2px;
+            }
+
+            .legend-labels {
+                display: flex;
+                justify-content: space-between;
+                font-size: 12px;
+                color: #ccc;
+                margin-top: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📡 Live Depth Map</h1>
+
+            <!-- The Hexagon Map -->
+            <canvas id="depthCanvas" width="400" height="400"></canvas>
+
+            <!-- Color Legend -->
+            <div style="width: 400px; max-width: 100%">
+                <div class="legend"></div>
+                <div class="legend-labels">
+                    <span>0mm (Flat)</span>
+                    <span>100mm</span>
+                    <span>200mm+ (High)</span>
+                </div>
+            </div>
+
+            <!-- Status Log -->
+            <div id="status" class="status-bar">Connecting to C# Server...</div>
+            <div
+                id="meta"
+                class="status-bar"
+                style="font-size: 0.9em; margin-top: 5px"
+            >
+                Waiting for data...
+            </div>
+        </div>
+
+        <script>
+            const API_URL = "http://localhost:8080/data";
+            const POLLING_RATE = 500; // Check for updates every 500ms
+
+            const canvas = document.getElementById("depthCanvas");
+            const ctx = canvas.getContext("2d");
+            const statusDiv = document.getElementById("status");
+            const metaDiv = document.getElementById("meta");
+
+            let lastDataHash = ""; // To detect if data actually changed
+
+            async function fetchDepthData() {
+                try {
+                    const response = await fetch(API_URL);
+
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Validate Data
+                    if (!Array.isArray(data) || data.length === 0) {
+                        statusDiv.innerHTML =
+                            "Received empty data. Is Calibration Saved?";
+                        return;
+                    }
+
+                    // Detect Grid Size dynamically (e.g. sqrt(160000) = 400)
+                    const size = Math.sqrt(data.length);
+                    if (size % 1 !== 0) {
+                        statusDiv.innerHTML = `Invalid data length: ${data.length}`;
+                        return;
+                    }
+
+                    // Resize canvas if config changed in C#
+                    if (canvas.width !== size) {
+                        canvas.width = size;
+                        canvas.height = size;
+                    }
+
+                    // Only render if data is new (simple optimization)
+                    const currentHash = JSON.stringify(data.slice(0, 50)); // Check first 50 pixels as a quick hash
+                    // Note: For a true check we'd compare the whole array, but we just want to update UI mostly.
+                    // Actually, let's just render every time to be safe.
+
+                    renderHeatmap(data, size);
+
+                    const timestamp = new Date().toLocaleTimeString();
+                    statusDiv.innerHTML = `<span class="status-active">● Connected</span> | Updated: ${timestamp}`;
+                    metaDiv.innerHTML = `Grid Size: ${size}x${size} | Points: ${data.length}`;
+                } catch (error) {
+                    statusDiv.innerHTML = `<span class="status-error">● Disconnected</span>`;
+                    metaDiv.innerHTML = `Error: ${error.message}. Is the C# App running as Admin?`;
+                }
+            }
+
+            function renderHeatmap(data, size) {
+                const imageData = ctx.createImageData(size, size);
+                const pixels = imageData.data; // R, G, B, A flat array
+
+                for (let i = 0; i < data.length; i++) {
+                    const delta = Math.abs(data[i]); // Get absolute deviation
+                    const color = getHeatColor(delta);
+
+                    const pxIndex = i * 4;
+                    pixels[pxIndex] = color.r; // Red
+                    pixels[pxIndex + 1] = color.g; // Green
+                    pixels[pxIndex + 2] = color.b; // Blue
+                    pixels[pxIndex + 3] = 255; // Alpha (Opaque)
+                }
+
+                ctx.putImageData(imageData, 0, 0);
+            }
+
+            // Logic matching C# HsvToRgb
+            // 0mm -> Blue (240), 200mm -> Red (0)
+            function getHeatColor(delta) {
+                const maxRange = 200;
+                if (delta > maxRange) delta = maxRange;
+
+                // Map 0..200 to Hue 240..0
+                const ratio = delta / maxRange;
+                const hue = 240 - ratio * 240;
+
+                return hslToRgb(hue / 360, 1.0, 0.5); // 50% Lightness for standard colors
+            }
+
+            // Helper: HSL to RGB conversion
+            function hslToRgb(h, s, l) {
+                let r, g, b;
+
+                if (s === 0) {
+                    r = g = b = l; // achromatic
+                } else {
+                    const hue2rgb = (p, q, t) => {
+                        if (t < 0) t += 1;
+                        if (t > 1) t -= 1;
+                        if (t < 1 / 6) return p + (q - p) * 6 * t;
+                        if (t < 1 / 2) return q;
+                        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                        return p;
+                    };
+
+                    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                    const p = 2 * l - q;
+                    r = hue2rgb(p, q, h + 1 / 3);
+                    g = hue2rgb(p, q, h);
+                    b = hue2rgb(p, q, h - 1 / 3);
+                }
+
+                return {
+                    r: Math.round(r * 255),
+                    g: Math.round(g * 255),
+                    b: Math.round(b * 255),
+                };
+            }
+
+            // Start Polling
+            setInterval(fetchDepthData, POLLING_RATE);
+            fetchDepthData(); // Initial call
+        </script>
+    </body>
+</html>

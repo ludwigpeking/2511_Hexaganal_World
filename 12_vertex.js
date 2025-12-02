@@ -167,8 +167,7 @@ class Vertex {
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist > 0) {
                         // Weight by slope magnitude, pointing downhill
-                        // Negative weight since positive slope means neighbor is higher
-                        const weight = -neighbor.slope; 
+                        const weight = neighbor.slope; // Positive if neighbor is higher
                         sumX += (dx / dist) * weight;
                         sumY += (dy / dist) * weight;
                     }

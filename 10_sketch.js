@@ -17,6 +17,11 @@ let steepSlopes = []; // Array of {from: vertex, to: vertex} for debug visualiza
 let selectedVertex = null; // For vertex inspection tool
 let canvasCreated = false; // Track if canvas has been created
 
+// Presentation layer
+let patternAtlas = null; // The texture atlas image
+let presentationBuffer = null; // Buffer for rendering textured quads
+let needsRedrawPresentation = true;
+
 // Graphics buffers for performance
 let elevationBuffer = null;
 let tilesBuffer = null;
@@ -30,6 +35,15 @@ let lastDebugState = {};
 let lastStaticState = {};
 
 async function setup() {
+    // Load pattern atlas
+    patternAtlas = await loadImage("assets/pattern_atlas.png");
+    console.log(
+        "Pattern atlas loaded:",
+        patternAtlas.width,
+        "x",
+        patternAtlas.height
+    );
+
     // Load JSON first to get canvas dimensions
     await loadDefaultMap();
 
@@ -53,6 +67,10 @@ async function setup() {
 
     select("#autoSimulate").changed(toggleAutoSimulation);
     select("#showElevation").changed(() => redraw());
+    select("#showPresentation").changed(() => {
+        invalidateBuffers("presentation");
+        redraw();
+    });
     select("#showVertices").changed(() => redraw());
     select("#showTraffic").changed(() => redraw());
     select("#showBuildings").changed(() => redraw());
@@ -84,10 +102,12 @@ function draw() {
         tilesBuffer = createGraphics(width, height);
         debugLayersBuffer = createGraphics(width, height);
         staticContentBuffer = createGraphics(width, height);
+        presentationBuffer = createGraphics(width, height);
     }
 
     const scale = topoData.mapping.hexToCanvasScale;
     const showElevation = select("#showElevation").checked();
+    const showPresentation = select("#showPresentation").checked();
     const showVertices = select("#showVertices").checked();
     const showTraffic = select("#showTraffic").checked();
     const showBuildings = select("#showBuildings").checked();
@@ -212,6 +232,23 @@ function draw() {
         drawSettlements();
     }
 
+    // Draw presentation layer with textured quads on top of everything (cached)
+    if (showPresentation && patternAtlas) {
+        console.log(
+            "Presentation layer enabled, atlas loaded:",
+            patternAtlas.width,
+            "x",
+            patternAtlas.height
+        );
+        if (needsRedrawPresentation) {
+            console.log("Redrawing presentation buffer");
+            presentationBuffer.clear();
+            drawPresentationLayerToBuffer(presentationBuffer, scale);
+            needsRedrawPresentation = false;
+        }
+        image(presentationBuffer, 0, 0);
+    }
+
     // Draw vertex inspector (always on top, always fresh)
     if (showVertexInspector && selectedVertex) {
         drawVertexInspector();
@@ -223,6 +260,8 @@ function invalidateBuffers(which = "all") {
     if (which === "all" || which === "tiles") needsRedrawTiles = true;
     if (which === "all" || which === "debug") needsRedrawDebugLayers = true;
     if (which === "all" || which === "static") needsRedrawStatic = true;
+    if (which === "all" || which === "presentation")
+        needsRedrawPresentation = true;
 }
 
 function mouseClicked() {
@@ -348,9 +387,10 @@ function processData() {
     const canvasHeight = topoData.mapping.canvasHeight;
 
     if (!canvasCreated) {
-        // First time: create canvas with correct size
+        // First time: create canvas in 2D mode (default)
         let canvas = createCanvas(canvasWidth, canvasHeight);
         canvas.parent("canvas-container");
+
         canvasCreated = true;
     } else {
         // Subsequent loads: resize existing canvas
@@ -986,6 +1026,56 @@ function drawTilesWithElevationToBuffer(buffer, scale) {
             waterLevel
         );
     });
+}
+
+function drawPresentationLayerToBuffer(buffer, scale) {
+    if (!patternAtlas) {
+        console.warn("Pattern atlas not loaded");
+        return;
+    }
+
+    console.log(
+        "Drawing presentation layer, tiles count:",
+        topoData.tiles.length
+    );
+    console.log("Buffer dimensions:", buffer.width, "x", buffer.height);
+
+    const vertexMap = new Map();
+    vertices.forEach((v) => vertexMap.set(v.index, v));
+
+    let drawnCount = 0;
+    topoData.tiles.forEach((tile) => {
+        const tileVertices = tile.vertexIndices.map((vIndex) =>
+            vertexMap.get(vIndex)
+        );
+        if (tileVertices.some((v) => !v)) return;
+
+        // Quad vertices in order: TL, TR, BR, BL (clockwise from top-left)
+        const tl = tileVertices[0];
+        const tr = tileVertices[1];
+        const br = tileVertices[2];
+        const bl = tileVertices[3];
+
+        // Get the signature for this quad
+        const signature = getQuadSignature(tl, tr, br, bl);
+
+        // Get UV coordinates for the atlas tile
+        const uvs = getTileUVs(signature);
+
+        // Draw the textured quad using triangle mapping
+        drawTexturedQuad2D(
+            buffer,
+            patternAtlas,
+            tl,
+            tr,
+            br,
+            bl,
+            uvs,
+            signature
+        );
+        drawnCount++;
+    });
+    console.log("Drew", drawnCount, "textured quads");
 }
 
 function drawTileBordersToBuffer(buffer, scale) {

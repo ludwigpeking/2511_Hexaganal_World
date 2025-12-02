@@ -33,6 +33,25 @@ class Settlement {
         vertex.occupiedByRoute = false; // Settlement vertices can have routes start/end here
         vertex.attrition = 500;
 
+        // Update presentation layer if enabled
+        if (
+            typeof showPresentation !== "undefined" &&
+            showPresentation &&
+            typeof redrawVertexQuads !== "undefined" &&
+            presentationBuffer &&
+            patternAtlas
+        ) {
+            const vertexMap = new Map();
+            topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
+            redrawVertexQuads(
+                presentationBuffer,
+                patternAtlas,
+                vertex,
+                topoData.tiles,
+                vertexMap
+            );
+        }
+
         // Remove from habitable
         habitable = habitable.filter((v) => v.index !== vertex.index);
     }

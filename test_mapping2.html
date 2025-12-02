@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Simple Quad Mapping Test</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family: Arial, sans-serif;
+            }
+            canvas {
+                border: 1px solid #ccc;
+                display: block;
+                margin: 20px auto;
+            }
+            .controls {
+                text-align: center;
+                margin: 20px;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="controls">
+            <h1>Simple Quad Mapping Test - Copy Method</h1>
+            <p>Map atlas patterns to quads using simple copy() approach</p>
+            <button onclick="testCopyMethod()">Test Copy Method</button>
+        </div>
+        <canvas id="canvas" width="800" height="600"></canvas>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script>
+            let atlas;
+            let cnv;
+
+            function setup() {
+                cnv = createCanvas(800, 600);
+                cnv.parent("canvas");
+                cnv.elt.remove(); // Remove p5's canvas
+
+                // Use the HTML canvas instead
+                cnv = document.getElementById("canvas");
+
+                atlas = loadImage("assets/pattern_atlas.png", () => {
+                    console.log(
+                        "Atlas loaded:",
+                        atlas.width,
+                        "x",
+                        atlas.height
+                    );
+                    background(240);
+                    fill(0);
+                    textSize(16);
+                    text('Atlas loaded. Click "Test Copy Method"', 50, 50);
+                });
+
+                noLoop();
+            }
+
+            function testCopyMethod() {
+                background(240);
+
+                // Define destination quad vertices
+                const tl = { x: 200, y: 150 };
+                const tr = { x: 350, y: 140 };
+                const br = { x: 360, y: 280 };
+                const bl = { x: 190, y: 290 };
+
+                // Draw the quad outline
+                noFill();
+                stroke(255, 0, 0);
+                strokeWeight(2);
+                beginShape();
+                vertex(tl.x, tl.y);
+                vertex(tr.x, tr.y);
+                vertex(br.x, br.y);
+                vertex(bl.x, bl.y);
+                endShape(CLOSE);
+
+                // Use p5's copy() to map a rectangular region to an irregular quad
+                // This won't work perfectly because copy() only does rect-to-rect
+                // But let's try with the bounding box approach
+
+                const minX = Math.min(tl.x, tr.x, br.x, bl.x);
+                const minY = Math.min(tl.y, tr.y, br.y, bl.y);
+                const maxX = Math.max(tl.x, tr.x, br.x, bl.x);
+                const maxY = Math.max(tl.y, tr.y, br.y, bl.y);
+
+                // Copy from atlas (0, 0, 80, 80) to bounding box
+                copy(atlas, 0, 0, 80, 80, minX, minY, maxX - minX, maxY - minY);
+
+                fill(0);
+                noStroke();
+                textSize(14);
+                text("Red outline = target quad", 50, 30);
+                text(
+                    "Image = bounding box copy (not perfect but simple)",
+                    50,
+                    50
+                );
+            }
+        </script>
+    </body>
+</html>

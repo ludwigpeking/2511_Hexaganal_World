@@ -169,6 +169,7 @@ function pathFinding(start, end, trafficWeight) {
 
         // Fifth pass: mark ALL vertices as occupied if sum of edge trafficCount >= 12
         // This must check all vertices, not just path vertices, because trafficCount accumulates
+        const updatedVertices = [];
         topoData.vertices.forEach((vertex) => {
             if (!vertex.occupiedBy) {
                 // Calculate sum of all edge traffic counts (same as Traffic Count debug layer)
@@ -176,12 +177,38 @@ function pathFinding(start, end, trafficWeight) {
                     (sum, n) => sum + (n.trafficCount || 0),
                     0
                 );
+                const wasOccupied = vertex.occupiedByRoute;
                 if (totalEdgeTraffic >= 12) {
                     vertex.occupied = true;
                     vertex.occupiedByRoute = true;
+                    if (!wasOccupied) {
+                        updatedVertices.push(vertex);
+                    }
                 }
             }
         });
+
+        // Update presentation layer for changed vertices
+        if (
+            updatedVertices.length > 0 &&
+            typeof showPresentation !== "undefined" &&
+            showPresentation &&
+            typeof redrawVertexQuads !== "undefined" &&
+            presentationBuffer &&
+            patternAtlas
+        ) {
+            const vertexMap = new Map();
+            topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
+            updatedVertices.forEach((vertex) => {
+                redrawVertexQuads(
+                    presentationBuffer,
+                    patternAtlas,
+                    vertex,
+                    topoData.tiles,
+                    vertexMap
+                );
+            });
+        }
 
         // Recalculate movement costs to apply traffic reduction
         calculateMovementCosts();

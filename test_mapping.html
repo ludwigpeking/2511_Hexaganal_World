@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Test Triangle Mapping</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 20px;
+                font-family: Arial, sans-serif;
+            }
+            canvas {
+                border: 1px solid #ccc;
+                display: block;
+                margin: 20px auto;
+            }
+            .controls {
+                text-align: center;
+                margin: 20px;
+            }
+            button {
+                padding: 10px 20px;
+                margin: 5px;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="controls">
+            <h1>Triangle Mapping Test</h1>
+            <p>Testing texture mapping from pattern atlas to irregular quad</p>
+            <button onclick="testMapping()">Test Mapping</button>
+            <button onclick="testSimpleImage()">Test Simple Image</button>
+        </div>
+        <canvas id="canvas" width="800" height="600"></canvas>
+
+        <script>
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            // Load the pattern atlas
+            const atlas = new Image();
+            atlas.src = "assets/pattern_atlas.png";
+
+            atlas.onload = function () {
+                console.log("Atlas loaded:", atlas.width, "x", atlas.height);
+                drawInitialState();
+            };
+
+            atlas.onerror = function (e) {
+                console.error("Failed to load atlas:", e);
+                ctx.fillStyle = "#000";
+                ctx.font = "16px Arial";
+                ctx.fillText(
+                    "ERROR: Could not load assets/pattern_atlas.png",
+                    50,
+                    50
+                );
+                ctx.fillText(
+                    "Check that the file exists in the assets folder",
+                    50,
+                    80
+                );
+            };
+
+            function drawInitialState() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#f0f0f0";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw instructions
+                ctx.fillStyle = "#000";
+                ctx.font = "16px Arial";
+                ctx.fillText(
+                    'Atlas loaded. Click "Test Mapping" to see texture mapping.',
+                    50,
+                    50
+                );
+            }
+
+            function testSimpleImage() {
+                console.log("testSimpleImage called");
+                console.log("Atlas complete?", atlas.complete);
+                console.log(
+                    "Atlas width:",
+                    atlas.width,
+                    "height:",
+                    atlas.height
+                );
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#f0f0f0";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                if (!atlas.complete || atlas.width === 0) {
+                    ctx.fillStyle = "#f00";
+                    ctx.font = "16px Arial";
+                    ctx.fillText("Atlas not loaded yet!", 50, 50);
+                    return;
+                }
+
+                // Test 1: Draw a red rectangle to verify canvas works
+                ctx.fillStyle = "red";
+                ctx.fillRect(100, 100, 80, 80);
+                console.log("Drew red test rectangle at (100,100,80,80)");
+
+                // Test 2: Try drawing the entire atlas (scaled down)
+                console.log("Drawing entire atlas at (0,0) scaled to 200x200");
+                ctx.drawImage(atlas, 0, 0, 200, 200);
+
+                // Test 3: Draw a piece of the atlas
+                console.log(
+                    "Drawing atlas from (0,0,80,80) to (300,100,80,80)"
+                );
+                ctx.drawImage(atlas, 0, 0, 80, 80, 300, 100, 80, 80);
+
+                ctx.fillStyle = "#000";
+                ctx.font = "14px Arial";
+                ctx.fillText(
+                    "Red rect = test, Top-left = atlas, Right = atlas piece",
+                    50,
+                    250
+                );
+
+                console.log("testSimpleImage completed");
+            }
+
+            function testMapping() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Define an irregular quad (destination)
+                const quad = {
+                    tl: { x: 200, y: 150 },
+                    tr: { x: 350, y: 140 },
+                    br: { x: 360, y: 280 },
+                    bl: { x: 190, y: 290 },
+                };
+
+                // Draw the quad outline first
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(quad.tl.x, quad.tl.y);
+                ctx.lineTo(quad.tr.x, quad.tr.y);
+                ctx.lineTo(quad.br.x, quad.br.y);
+                ctx.lineTo(quad.bl.x, quad.bl.y);
+                ctx.closePath();
+                ctx.stroke();
+
+                // Test signature: "12rr"
+                // 1 = digit 2, 2 = digit 3, r = digit 1, r = digit 1
+                const signature = "12rr";
+                const uvs = getTileUVs(signature);
+
+                console.log("Testing signature:", signature);
+                console.log("UVs:", uvs);
+
+                // Calculate source coordinates in atlas (pixels)
+                const atlasWidth = 2000;
+                const atlasHeight = 2000;
+                const sx = uvs.u * atlasWidth;
+                const sy = uvs.v * atlasHeight;
+                const sw = uvs.uWidth * atlasWidth;
+                const sh = uvs.vHeight * atlasHeight;
+
+                console.log("Source rect in atlas:", sx, sy, sw, sh);
+
+                // Create a temporary canvas with just the tile we want
+                const tempCanvas = document.createElement("canvas");
+                tempCanvas.width = sw;
+                tempCanvas.height = sh;
+                const tempCtx = tempCanvas.getContext("2d");
+
+                // Copy just the tile from the atlas to the temp canvas
+                tempCtx.drawImage(atlas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+                // Now map the temp canvas to the quad using triangles
+                // Triangle 1: TL -> TR -> BR
+                mapTriangle(
+                    ctx,
+                    tempCanvas,
+                    0,
+                    0,
+                    sw,
+                    0,
+                    sw,
+                    sh, // Source triangle
+                    quad.tl.x,
+                    quad.tl.y,
+                    quad.tr.x,
+                    quad.tr.y,
+                    quad.br.x,
+                    quad.br.y // Destination triangle
+                );
+
+                // Triangle 2: TL -> BR -> BL
+                mapTriangle(
+                    ctx,
+                    tempCanvas,
+                    0,
+                    0,
+                    sw,
+                    sh,
+                    0,
+                    sh, // Source triangle
+                    quad.tl.x,
+                    quad.tl.y,
+                    quad.br.x,
+                    quad.br.y,
+                    quad.bl.x,
+                    quad.bl.y // Destination triangle
+                );
+
+                // Draw labels
+                ctx.fillStyle = "#000";
+                ctx.font = "12px Arial";
+                ctx.fillText("TL", quad.tl.x - 20, quad.tl.y);
+                ctx.fillText("TR", quad.tr.x + 10, quad.tr.y);
+                ctx.fillText("BR", quad.br.x + 10, quad.br.y);
+                ctx.fillText("BL", quad.bl.x - 20, quad.bl.y);
+
+                ctx.fillText(
+                    'Red outline = target quad, Pattern = "12rr"',
+                    50,
+                    30
+                );
+                ctx.fillText(
+                    "Pattern mapped using triangular subdivision",
+                    50,
+                    50
+                );
+            }
+
+            // Symbol to quinary digit mapping
+            const symbolMap = {
+                w: 0,
+                r: 1,
+                1: 2,
+                2: 3,
+                c: 4,
+            };
+
+            function getTileUVs(signature) {
+                const ATLAS_SIZE = 25;
+
+                if (signature.length !== 4) {
+                    console.error("Invalid signature length:", signature);
+                    return { u: 0, v: 0, uWidth: 0.04, vHeight: 0.04 };
+                }
+
+                // Convert characters to quinary digits
+                const digits = signature.split("").map((char) => {
+                    const digit = symbolMap[char];
+                    if (digit === undefined) {
+                        console.warn(
+                            `Unknown symbol '${char}' in signature '${signature}'`
+                        );
+                        return 0;
+                    }
+                    return digit;
+                });
+
+                console.log("Digits:", digits);
+
+                // Calculate atlas position using quinary system
+                // First 2 chars determine x position (0-24)
+                const xPos = digits[0] * 5 + digits[1];
+
+                // Last 2 chars determine y position (0-24)
+                const yPos = digits[2] * 5 + digits[3];
+
+                console.log("Atlas position:", xPos, yPos);
+
+                // Convert to normalized UV coordinates (0-1)
+                const u = xPos / ATLAS_SIZE;
+                const v = yPos / ATLAS_SIZE;
+                const uWidth = 1 / ATLAS_SIZE;
+                const vHeight = 1 / ATLAS_SIZE;
+
+                return {
+                    u: u,
+                    v: v,
+                    uWidth: uWidth,
+                    vHeight: vHeight,
+                };
+            }
+
+            function mapTriangle(
+                ctx,
+                img,
+                sx1,
+                sy1,
+                sx2,
+                sy2,
+                sx3,
+                sy3,
+                dx1,
+                dy1,
+                dx2,
+                dy2,
+                dx3,
+                dy3
+            ) {
+                ctx.save();
+
+                // Clip to destination triangle
+                ctx.beginPath();
+                ctx.moveTo(dx1, dy1);
+                ctx.lineTo(dx2, dy2);
+                ctx.lineTo(dx3, dy3);
+                ctx.closePath();
+                ctx.clip();
+
+                // Calculate the Affine Transform Matrix using Cramer's rule
+                // Denominator for Cramer's rule
+                const den =
+                    sx1 * (sy3 - sy2) -
+                    sx2 * sy3 +
+                    sx3 * sy2 +
+                    (sx2 - sx3) * sy1;
+
+                if (den === 0) {
+                    ctx.restore();
+                    return;
+                }
+
+                const m11 =
+                    -(
+                        sy1 * (dx3 - dx2) -
+                        sy2 * dx3 +
+                        sy3 * dx2 +
+                        (sy2 - sy3) * dx1
+                    ) / den;
+                const m12 =
+                    (sy2 * dy3 +
+                        sy1 * (dy2 - dy3) -
+                        sy3 * dy2 +
+                        (sy3 - sy2) * dy1) /
+                    den;
+                const m21 =
+                    (sx1 * (dx3 - dx2) -
+                        sx2 * dx3 +
+                        sx3 * dx2 +
+                        (sx2 - sx3) * dx1) /
+                    den;
+                const m22 =
+                    -(
+                        sx2 * dy3 +
+                        sx1 * (dy2 - dy3) -
+                        sx3 * dy2 +
+                        (sx3 - sx2) * dy1
+                    ) / den;
+                const dx =
+                    (sx1 * (sy3 * dx2 - sy2 * dx3) +
+                        sx2 * sy1 * dx3 -
+                        sx3 * sy1 * dx2 +
+                        (sx3 * sy2 - sx2 * sy3) * dx1) /
+                    den;
+                const dy =
+                    (sx1 * (sy3 * dy2 - sy2 * dy3) +
+                        sx2 * sy1 * dy3 -
+                        sx3 * sy1 * dy2 +
+                        (sx3 * sy2 - sx2 * sy3) * dy1) /
+                    den;
+
+                // Apply the matrix
+                ctx.transform(m11, m12, m21, m22, dx, dy);
+
+                // Draw the image
+                ctx.drawImage(img, 0, 0);
+
+                ctx.restore();
+            }
+
+            // Draw initial state if atlas already loaded
+            if (atlas.complete) {
+                drawInitialState();
+            }
+        </script>
+    </body>
+</html>
