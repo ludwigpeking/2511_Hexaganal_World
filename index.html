@@ -1,105 +1,243 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
     <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Kinect Depth + Texture Mapping Test</title>
-        <style>
-            body {
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #1e1e1e;
-                color: #f0f0f0;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                margin: 0;
-                padding: 20px;
-            }
-
-            h1 {
-                margin-bottom: 10px;
-            }
-
-            .container {
-                background-color: #2d2d2d;
-                padding: 20px;
-                border-radius: 8px;
-                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-                text-align: center;
-            }
-
-            #canvas-container {
-                border: 2px solid #444;
-                background-color: #000;
-            }
-
-            .status-bar {
-                margin-top: 15px;
-                padding: 10px;
-                background-color: #333;
-                border-radius: 4px;
-                font-family: monospace;
-                color: #aaa;
-                width: 100%;
-                box-sizing: border-box;
-            }
-
-            .status-active {
-                color: #4caf50;
-                font-weight: bold;
-            }
-            .status-error {
-                color: #f44336;
-                font-weight: bold;
-            }
-
-            .info-panel {
-                margin-top: 15px;
-                padding: 10px;
-                background-color: #333;
-                border-radius: 4px;
-                font-family: monospace;
-                font-size: 0.9em;
-                color: #ccc;
-                text-align: left;
-            }
-
-            .info-row {
-                margin: 5px 0;
-            }
-        </style>
+        <meta charset="utf-8" />
+        <title>World Simulator</title>
+        <link rel="stylesheet" href="style.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script src="11_utils.js"></script>
+        <script src="12_vertex.js"></script>
+        <script src="16_marchingSquares.js"></script>
+        <script src="13_pathfinding.js"></script>
+        <script src="15_settlement.js"></script>
+        <script src="14_values.js"></script>
+        <script src="17_presentation.js"></script>
+        <script src="20_mousePlay.js"></script>
+        <script src="10_sketch.js"></script>
     </head>
     <body>
-        <div class="container">
-            <h1>🗺️ Kinect Depth + Texture Mapping Test</h1>
+        <div id="canvas-container"></div>
 
-            <!-- The p5.js Canvas -->
-            <div id="canvas-container"></div>
+        <div id="right-panel">
+            <h1>🌍 World Simulator</h1>
 
-            <!-- Status Log -->
-            <div id="status" class="status-bar">Loading...</div>
+            <div id="controls">
+                <div>
+                    <strong>File:</strong>
+                    <button id="loadFileBtn">Load Topology File</button>
+                    <input type="file" id="fileInput" accept=".json" />
+                    <button id="resetSimBtn">Reset Simulation</button>
+                </div>
+                <div>
+                    <strong>Pathfinding:</strong>
+                    <button id="createRouteBtn">Create Random Route</button>
+                    <button id="clearRoutesBtn">Clear All Routes</button>
+                </div>
+                <div id="caste-group">
+                    <strong>Castes:</strong>
+                    <button id="addLordBtn">Add Lord</button>
+                    <button id="addFarmerBtn">Add Farmer</button>
+                    <button id="addMerchantBtn">Add Merchant</button>
+                    <button id="randomTravelBtn">Random Travel</button>
+                </div>
 
-            <!-- Info Panel -->
-            <div class="info-panel">
-                <div class="info-row">
-                    Map: <span id="map-info">Loading...</span>
+                <div>
+                    <strong>Pathfinding Params:</strong><br />
+                    <label>Uphill Factor:</label>
+                    <input
+                        type="number"
+                        id="uphillFactor"
+                        value="1"
+                        step="0.1"
+                        min="0"
+                        max="5"
+                    />
+
+                    <label>Downhill Factor:</label>
+                    <input
+                        type="number"
+                        id="downhillFactor"
+                        value="0.3"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                    />
+
+                    <label>Flat Terrain Cost:</label>
+                    <input
+                        type="number"
+                        id="flatTerrainCost"
+                        value="2"
+                        step="0.5"
+                        min="0.5"
+                        max="10"
+                    />
+                    <button id="setTerrainParamsBtn">OK</button><br />
+
+                    <label>Traffic Weight:</label>
+                    <input
+                        type="number"
+                        id="trafficWeight"
+                        value="12"
+                        step="1"
+                        min="1"
+                        max="20"
+                    />
+
+                    <label>Water Level:</label>
+                    <input type="number" id="waterLevel" value="14" step="1" />
+                    <button id="setWaterLevelBtn">OK</button><br />
+
+                    <label>Mode Change Cost:</label>
+                    <input
+                        type="number"
+                        id="modeChangeCost"
+                        value="50"
+                        step="5"
+                        min="0"
+                        max="200"
+                    />
+
+                    <label>Water Transport Factor:</label>
+                    <input
+                        type="number"
+                        id="waterTransportFactor"
+                        value="0.01"
+                        step="0.01"
+                        min="0.001"
+                        max="1"
+                    />
                 </div>
-                <div class="info-row">
-                    Kinect: <span id="kinect-info">Connecting...</span>
+
+                <div>
+                    <label>Simulation Speed:</label>
+                    <input
+                        type="number"
+                        id="simSpeed"
+                        value="1"
+                        step="1"
+                        min="1"
+                        max="10"
+                    />
+
+                    <label>
+                        <input type="checkbox" id="autoSimulate" />
+                        Auto-run Simulation
+                    </label>
                 </div>
-                <div class="info-row">
-                    Atlas: <span id="atlas-info">Loading...</span>
+
+                <div>
+                    <label>
+                        <input type="checkbox" id="showElevation" checked />
+                        Show Elevation Colors
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showPresentation" checked />
+                        Show Textured Presentation
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showVertices" />
+                        Show Vertices
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showTraffic" />
+                        Show Traffic Weights
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showBuildings" />
+                        Show Buildings
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showRoutes" />
+                        Show Routes
+                    </label>
                 </div>
-                <div class="info-row">
-                    Updates: <span id="update-count">0</span>
+
+                <div>
+                    <strong>Debug Layers:</strong>
+                    <label>
+                        <input type="checkbox" id="showDefense" />
+                        Defense Value
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showSecurity" />
+                        Security Value
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showFarmValue" />
+                        Farm Value
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showFarmerValue" />
+                        Farmer Value
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showMerchantValue" />
+                        Merchant Value
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showSteepness" />
+                        Steepness
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showSlopeDirection" />
+                        Slope Direction
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showHabitable" />
+                        Habitable
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showOccupied" />
+                        Occupied
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showTrafficCount" />
+                        Traffic Count
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showVertexInspector" />
+                        Vertex Inspector
+                    </label>
                 </div>
+
+                <div>
+                    <h3>Instructions</h3>
+                    <p>1. Load the topology map</p>
+                    <p>
+                        2. Click "Create Random Route" to generate a trade route
+                        between two random edge vertices
+                    </p>
+                    <p>
+                        3. The pathfinding uses A* with terrain resistance based
+                        on slopes and elevation changes
+                    </p>
+                    <p>
+                        4. Click "Run Simulation Step" to evolve the world
+                        (future: settlements, resources, etc.)
+                    </p>
+                    <p>
+                        5. Enable "Auto-run Simulation" for continuous evolution
+                    </p>
+                </div>
+
+                <div>
+                    <h3>Simulation Statistics</h3>
+                    <div id="sim-stats">
+                        <div>
+                            <span>Simulation Step:</span>
+                            <span id="step-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3>Route Statistics</h3>
+                    <div id="route-stats">No routes created yet</div>
+                </div>
+
+                <div id="progress">Click "Load Topology File" to begin</div>
             </div>
         </div>
-
-        <!-- p5.js Library -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
-
-        <!-- Our sketch -->
-        <script src="sketch.js"></script>
     </body>
 </html>
