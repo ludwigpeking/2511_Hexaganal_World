@@ -2,11 +2,10 @@
 <html>
     <head>
         <meta charset="utf-8" />
-        <title>Hex Map to GeoTIFF Mapper</title>
+        <title>Kinect Depth to Hex Mapper</title>
         <link rel="stylesheet" href="style.css" />
-        <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist-browser/geotiff.js"></script>
         <script src="16_marchingSquares.js"></script>
-        <script src="03_hexToTiffMapper.js"></script>
+        <script src="06_kinect_depth_mapper.js"></script>
         <style>
             body {
                 display: block;
@@ -54,7 +53,7 @@
         </style>
     </head>
     <body>
-        <h1>Hex Map to GeoTIFF Mapper</h1>
+        <h1>Kinect Depth to Hex Map Mapper</h1>
 
         <div id="controls">
             <button onclick="exportResults()">Export Results JSON</button>
@@ -71,7 +70,7 @@
         </div>
 
         <div id="legend">
-            <h3>Elevation Legend</h3>
+            <h3>Depth Legend</h3>
             <div id="legend-gradient"></div>
             <div class="legend-labels">
                 <span id="legend-min">Min</span>

@@ -17,8 +17,8 @@ let depthData = null;
 let depthGridSize = 0;
 
 // Canvas settings
-const CANVAS_WIDTH = 1200;
-const CANVAS_HEIGHT = 800;
+const CANVAS_WIDTH = 1920;
+const CANVAS_HEIGHT = 1080;
 
 // Visualization scale
 let vizScale = 1;
@@ -40,7 +40,7 @@ let maxElev = 200; // Max expected depth in mm
 function preload() {
     // Load map data
     mapData = loadJSON(
-        "results/map_3.json",
+        "results/map_4_small.json",
         () => {
             console.log("Map loaded successfully");
             document.getElementById("map-info").textContent = "Loaded ✓";
@@ -50,8 +50,6 @@ function preload() {
             document.getElementById("map-info").textContent = "Failed ✗";
         }
     );
-
-    document.getElementById("atlas-info").textContent = "Not needed ✓";
 }
 
 function setup() {
