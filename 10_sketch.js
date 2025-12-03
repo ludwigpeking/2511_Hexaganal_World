@@ -88,6 +88,9 @@ async function setup() {
     select("#showVertexInspector").changed(() => redraw());
     select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
+
+    // Initialize mouse play UI
+    initializeMousePlayUI();
 }
 
 function draw() {
@@ -157,7 +160,7 @@ function draw() {
         lastStaticState = staticState;
     }
 
-    background(0);
+    background(255);
 
     // Draw elevation layer (cached)
     if (showElevation) {
@@ -267,6 +270,11 @@ function invalidateBuffers(which = "all") {
 function mouseClicked() {
     if (!topoData || !vertices || vertices.length === 0) return;
 
+    // Check if mouse play is handling the click
+    if (handleMousePlayClick()) {
+        return; // Mouse play handled it
+    }
+
     const showVertexInspector = select("#showVertexInspector").checked();
     if (!showVertexInspector) return;
 
@@ -324,7 +332,7 @@ function keyPressed() {
 async function loadDefaultMap() {
     updateProgress("Loading default map...");
     try {
-        const response = await fetch("results/topo_4_1080.json");
+        const response = await fetch("results/topo_4_lowRes.json");
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -507,7 +515,9 @@ function processData() {
     initializeSimulationValues();
 
     // Create hardcoded trade route from vertex 3461 to 2409
-    createHardcodedRoute(3461, 2409);
+    // createHardcodedRoute(3461, 2409); //full res version
+
+    createHardcodedRoute(1018, 100); //half res version
 
     updateProgress("Map loaded successfully!");
     invalidateBuffers("all");

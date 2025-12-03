@@ -16,10 +16,7 @@ let inputFields = {};
 let buttons = {};
 
 // Map data
-let hexGridDiameter = 40;
-let hexRingCount = 10;
 let vertices = [];
-let edges = [];
 let faces = [];
 let mergedFaces = [];
 let subdivVertices = [];
@@ -194,10 +191,6 @@ function startGeneration() {
         inputFields.relaxationStrength.value()
     );
 
-    // Set global variables
-    hexGridDiameter = params.hexGridDiameter;
-    hexRingCount = params.hexRingCount;
-
     currentScreen = "generating";
     background(220);
     fill(0);
@@ -227,7 +220,7 @@ function generateMap() {
     const centralPoint = new Vertex(0, 0, 0);
     vertices.push(centralPoint);
 
-    for (let i = 1; i <= hexRingCount; i++) {
+    for (let i = 1; i <= params.hexRingCount; i++) {
         for (let j = 0; j < 6; j++) {
             for (let k = 0; k < i; k++) {
                 const p = new Vertex(i, j, k);
@@ -388,8 +381,6 @@ function reconstructMapFromData(mapData) {
 
     // Restore parameters
     params = mapData.params;
-    hexGridDiameter = params.hexGridDiameter;
-    hexRingCount = params.hexRingCount;
 
     // Rebuild vertices from tile data
     let vertexMap = new Map();
@@ -437,7 +428,7 @@ function createFaces() {
         faces.push(new Face([p1, p2, p3]));
     }
     //outer rings
-    for (let i = 2; i < hexRingCount + 1; i++) {
+    for (let i = 2; i < params.hexRingCount + 1; i++) {
         for (let j = 0; j < 6; j++) {
             for (let k = 0; k < i; k++) {
                 const p0 =
@@ -459,7 +450,7 @@ function createFaces() {
                     ];
 
                 faces.push(new Face([p0, p1, p2]));
-                if (i < hexRingCount) {
+                if (i < params.hexRingCount) {
                     const p3 =
                         vertices[
                             getVertexIndex(
@@ -933,16 +924,18 @@ class Vertex {
             this.index = 1 + (i * 6 * (i - 1)) / 2 + j * i + k;
         }
         this.edgy = false;
-        if (i === hexRingCount) {
+        if (i === params.hexRingCount) {
             this.edgy = true;
         }
 
         this.p1 = { x: 0, y: 0 };
         this.p2 = { x: 0, y: 0 };
-        this.p1.x = width / 2 + i * hexGridDiameter * cos((j * PI) / 3);
-        this.p1.y = height / 2 + i * hexGridDiameter * sin((j * PI) / 3);
-        this.p2.x = width / 2 + i * hexGridDiameter * cos(((j + 1) * PI) / 3);
-        this.p2.y = height / 2 + i * hexGridDiameter * sin(((j + 1) * PI) / 3);
+        this.p1.x = width / 2 + i * params.hexGridDiameter * cos((j * PI) / 3);
+        this.p1.y = height / 2 + i * params.hexGridDiameter * sin((j * PI) / 3);
+        this.p2.x =
+            width / 2 + i * params.hexGridDiameter * cos(((j + 1) * PI) / 3);
+        this.p2.y =
+            height / 2 + i * params.hexGridDiameter * sin(((j + 1) * PI) / 3);
         //lerp between p1 and p2 by k, k is between 0 and i
         if (i == 0) {
             this.x = this.p1.x;
@@ -969,16 +962,6 @@ class SubdivVertex {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-    }
-}
-
-class Edge {
-    constructor(v1, v2) {
-        this.v1 = v1;
-        this.v2 = v2;
-    }
-    draw() {
-        line(this.v1.x, this.v1.y, this.v2.x, this.v2.y);
     }
 }
 

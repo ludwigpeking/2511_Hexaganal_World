@@ -12,6 +12,7 @@
         <script src="15_settlement.js"></script>
         <script src="14_values.js"></script>
         <script src="17_presentation.js"></script>
+        <script src="20_mousePlay.js"></script>
         <script src="10_sketch.js"></script>
     </head>
     <body>
@@ -32,7 +33,7 @@
                     <button id="createRouteBtn">Create Random Route</button>
                     <button id="clearRoutesBtn">Clear All Routes</button>
                 </div>
-                <div>
+                <div id="caste-group">
                     <strong>Castes:</strong>
                     <button id="addLordBtn">Add Lord</button>
                     <button id="addFarmerBtn">Add Farmer</button>
@@ -131,7 +132,7 @@
                         Show Elevation Colors
                     </label>
                     <label>
-                        <input type="checkbox" id="showPresentation" />
+                        <input type="checkbox" id="showPresentation" checked />
                         Show Textured Presentation
                     </label>
                     <label>
@@ -143,11 +144,11 @@
                         Show Traffic Weights
                     </label>
                     <label>
-                        <input type="checkbox" id="showBuildings" checked />
+                        <input type="checkbox" id="showBuildings" />
                         Show Buildings
                     </label>
                     <label>
-                        <input type="checkbox" id="showRoutes" checked />
+                        <input type="checkbox" id="showRoutes" />
                         Show Routes
                     </label>
                 </div>
