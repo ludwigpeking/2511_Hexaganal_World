@@ -17,6 +17,17 @@ let steepSlopes = []; // Array of {from: vertex, to: vertex} for debug visualiza
 let selectedVertex = null; // For vertex inspection tool
 let canvasCreated = false; // Track if canvas has been created
 
+// Kinect integration
+let kinectEnabled = false;
+let kinectPollingInterval = null;
+let kinectDepthData = null;
+let kinectGridSize = 0;
+let kinectUpdateCount = 0;
+let lastKinectHash = "";
+const KINECT_API_URL = "http://localhost:8080/data";
+const KINECT_POLLING_RATE = 500;
+let hexMapData = null; // Store original hex map structure
+
 // Presentation layer
 let patternAtlas = null; // The texture atlas image
 let presentationBuffer = null; // Buffer for rendering textured quads
@@ -88,6 +99,7 @@ async function setup() {
     select("#showVertexInspector").changed(() => redraw());
     select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
+    select("#toggleKinectBtn").mousePressed(toggleKinect);
 
     // Initialize mouse play UI
     initializeMousePlayUI();
@@ -178,7 +190,7 @@ function draw() {
         drawTileBordersToBuffer(tilesBuffer, scale);
         needsRedrawTiles = false;
     }
-    image(tilesBuffer, 0, 0);
+    // image(tilesBuffer, 0, 0);
 
     // Draw debug layers (cached when state doesn't change)
     if (needsRedrawDebugLayers) {
@@ -358,6 +370,392 @@ async function loadCustomFile(event) {
         updateProgress("Error loading file: " + error.message);
         console.error(error);
     }
+}
+
+async function toggleKinect() {
+    kinectEnabled = !kinectEnabled;
+    const btn = select("#toggleKinectBtn");
+
+    if (kinectEnabled) {
+        // Load hex map structure if not already loaded
+        if (!hexMapData) {
+            try {
+                const response = await fetch("results/map_4_small.json");
+                hexMapData = await response.json();
+                console.log("Hex map structure loaded for kinect mapping");
+            } catch (error) {
+                updateProgress(
+                    "Error loading hex map structure: " + error.message
+                );
+                kinectEnabled = false;
+                btn.html("Enable Kinect");
+                return;
+            }
+        }
+
+        btn.html("Disable Kinect");
+        updateProgress("Kinect mode enabled - polling started");
+        kinectPollingInterval = setInterval(
+            fetchKinectDepth,
+            KINECT_POLLING_RATE
+        );
+        fetchKinectDepth(); // Initial fetch
+    } else {
+        btn.html("Enable Kinect");
+        updateProgress("Kinect mode disabled");
+        if (kinectPollingInterval) {
+            clearInterval(kinectPollingInterval);
+            kinectPollingInterval = null;
+        }
+    }
+}
+
+async function fetchKinectDepth() {
+    try {
+        const response = await fetch(KINECT_API_URL);
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Validate data
+        if (!Array.isArray(data) || data.length === 0) {
+            console.warn("Empty kinect data received");
+            return;
+        }
+
+        // Detect grid size
+        const size = Math.sqrt(data.length);
+        if (size % 1 !== 0) {
+            console.error(`Invalid kinect data length: ${data.length}`);
+            return;
+        }
+
+        // Check if data changed
+        const currentHash = JSON.stringify(data);
+        if (currentHash === lastKinectHash) {
+            return; // No change
+        }
+        lastKinectHash = currentHash;
+
+        // Update depth data
+        kinectDepthData = data;
+        kinectGridSize = size;
+        kinectUpdateCount++;
+
+        // Process depth data and rebuild topoData
+        await processKinectDepthToTopo();
+
+        updateProgress(
+            `Kinect update ${kinectUpdateCount} - ${new Date().toLocaleTimeString()}`
+        );
+    } catch (error) {
+        console.error("Kinect fetch error:", error);
+    }
+}
+
+async function processKinectDepthToTopo() {
+    if (!hexMapData || !kinectDepthData) return;
+
+    // Calculate hex bounds
+    const hexBounds = calculateHexBounds(hexMapData.vertices);
+
+    // Get canvas dimensions (use current or default)
+    const canvasWidth = topoData ? topoData.mapping.canvasWidth : 1920;
+    const canvasHeight = topoData ? topoData.mapping.canvasHeight : 1080;
+
+    // Calculate mapping parameters (same as in 03_hexToTiffMapper)
+    const hexScaleX = canvasWidth / hexBounds.width;
+    const hexScaleY = canvasHeight / hexBounds.height;
+    const hexToCanvasScale = Math.min(hexScaleX, hexScaleY);
+
+    const actualHexCanvasWidth = hexBounds.width * hexToCanvasScale;
+    const actualHexCanvasHeight = hexBounds.height * hexToCanvasScale;
+
+    // Assume kinect depth in mm, convert to meters for metersPerCanvasPixel
+    // Using a default scale: 1 canvas pixel = 10 meters (adjust as needed)
+    const metersPerCanvasPixel = 10;
+
+    // Create new topoData structure based on hex map
+    const newTopoData = {
+        params: hexMapData.params,
+        mapping: {
+            hexBounds: hexBounds,
+            hexCenter: {
+                x: (hexBounds.minX + hexBounds.maxX) / 2,
+                y: (hexBounds.minY + hexBounds.maxY) / 2,
+            },
+            canvasWidth: canvasWidth,
+            canvasHeight: canvasHeight,
+            hexToCanvasScale: hexToCanvasScale,
+            metersPerCanvasPixel: metersPerCanvasPixel,
+            actualHexCanvasWidth: actualHexCanvasWidth,
+            actualHexCanvasHeight: actualHexCanvasHeight,
+            kinectGridSize: kinectGridSize,
+        },
+        vertices: [],
+        tiles: [],
+    };
+
+    // Transform tiles structure from hexMapData format to topoData format
+    hexMapData.tiles.forEach((tile) => {
+        newTopoData.tiles.push({
+            id: tile.id,
+            vertexIndices: tile.vertices.map((v) => v.index),
+            neighbors: tile.neighbors,
+            center: tile.center,
+            centerX: tile.center ? tile.center.x : null,
+            centerY: tile.center ? tile.center.y : null,
+            area: tile.area,
+        });
+    });
+
+    // Build vertex neighbor relationships from tile topology
+    const vertexNeighborsMap = new Map();
+    hexMapData.vertices.forEach((v) => {
+        vertexNeighborsMap.set(v.index, new Set());
+    });
+
+    hexMapData.tiles.forEach((tile) => {
+        const vertices = tile.vertices;
+        // Each vertex in a quad is neighbor to the next/previous vertex in the quad
+        for (let i = 0; i < vertices.length; i++) {
+            const v1 = vertices[i];
+            const v2 = vertices[(i + 1) % vertices.length];
+            vertexNeighborsMap.get(v1.index).add(v2.index);
+            vertexNeighborsMap.get(v2.index).add(v1.index);
+        }
+    });
+
+    // Map depth to vertices with neighbor data
+    const mappedVertices = [];
+
+    hexMapData.vertices.forEach((vertex) => {
+        // Transform hex coords to depth grid coords
+        const gridCoords = hexToDepthGrid(
+            vertex.x,
+            vertex.y,
+            newTopoData.mapping.hexBounds
+        );
+
+        // Interpolate depth (convert mm to meters by dividing by 1000)
+        const depthMm = interpolateKinectDepth(gridCoords.x, gridCoords.y);
+        const elevation = depthMm; // Convert to meters
+
+        // Create vertex with depth as elevation
+        const newVertex = {
+            index: vertex.index,
+            hexCoords: { x: vertex.x, y: vertex.y }, // Vertex constructor expects hexCoords object
+            elevation: elevation,
+            neighbors: [], // Will populate with edge data
+            adjacentFaces: vertex.adjacentFaces,
+        };
+
+        mappedVertices.push(newVertex);
+    });
+
+    // Calculate edge data with proper distances and slopes
+    const vizScale = hexToCanvasScale;
+
+    mappedVertices.forEach((v1) => {
+        const neighborIndices = vertexNeighborsMap.get(v1.index);
+
+        neighborIndices.forEach((neighborIndex) => {
+            const v2 = mappedVertices[neighborIndex];
+
+            // Calculate distance in hex coordinate space
+            const dx = v2.hexCoords.x - v1.hexCoords.x;
+            const dy = v2.hexCoords.y - v1.hexCoords.y;
+            const distanceHexCoords = Math.sqrt(dx * dx + dy * dy);
+
+            // Convert to canvas pixels
+            const distanceCanvasPixels = distanceHexCoords * vizScale;
+
+            // Convert to real-world meters
+            const horizontalDistanceMeters =
+                distanceCanvasPixels * metersPerCanvasPixel;
+
+            // Calculate elevation difference (already in meters)
+            const elevationDiff = v2.elevation - v1.elevation;
+
+            // Calculate slope
+            const slope =
+                horizontalDistanceMeters > 0
+                    ? elevationDiff / horizontalDistanceMeters
+                    : 0;
+
+            // Store edge data
+            v1.neighbors.push({
+                vertexIndex: neighborIndex,
+                distanceHexCoords: distanceHexCoords,
+                distanceCanvasPixels: distanceCanvasPixels,
+                horizontalDistanceMeters: horizontalDistanceMeters,
+                elevationDiff: elevationDiff,
+                slope: slope,
+                slopeAngle: Math.atan(slope) * (180 / Math.PI),
+                slopePercent: slope * 100,
+            });
+        });
+    });
+
+    newTopoData.vertices = mappedVertices;
+
+    // Replace topoData and restart simulation
+    topoData = newTopoData;
+
+    // Clear all simulation state
+    settlements = [];
+    routes = [];
+    travelers = [];
+    tradeDestination1 = null;
+    tradeDestination2 = null;
+    simulationStep = 0;
+
+    // Stop auto simulation if running
+    if (autoSimInterval) {
+        clearInterval(autoSimInterval);
+        autoSimInterval = null;
+        select("#autoSimulate").elt.checked = false;
+    }
+
+    // Reprocess data
+    processData();
+}
+
+function calculateHexBounds(vertices) {
+    let minX = Infinity,
+        maxX = -Infinity;
+    let minY = Infinity,
+        maxY = -Infinity;
+
+    vertices.forEach((v) => {
+        minX = Math.min(minX, v.x);
+        maxX = Math.max(maxX, v.x);
+        minY = Math.min(minY, v.y);
+        maxY = Math.max(maxY, v.y);
+    });
+
+    return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        width: maxX - minX,
+        height: maxY - minY,
+    };
+}
+
+function hexToDepthGrid(hexX, hexY, bounds) {
+    if (!kinectGridSize) return { x: 0, y: 0 };
+
+    const relX = hexX - bounds.minX;
+    const relY = hexY - bounds.minY;
+
+    const gridX = (relX / bounds.width) * kinectGridSize;
+    const gridY = (relY / bounds.height) * kinectGridSize;
+
+    return { x: gridX, y: gridY };
+}
+
+function interpolateKinectDepth(gridX, gridY) {
+    if (!kinectDepthData || !kinectGridSize) return 0;
+
+    // Clamp to grid bounds
+    gridX = Math.max(0, Math.min(kinectGridSize - 1, gridX));
+    gridY = Math.max(0, Math.min(kinectGridSize - 1, gridY));
+
+    // Get integer coordinates
+    const x0 = Math.floor(gridX);
+    const y0 = Math.floor(gridY);
+    const x1 = Math.min(x0 + 1, kinectGridSize - 1);
+    const y1 = Math.min(y0 + 1, kinectGridSize - 1);
+
+    // Get fractional parts
+    const fx = gridX - x0;
+    const fy = gridY - y0;
+
+    // Get depth values at corners, handling missing data
+    const d00_raw = kinectDepthData[y0 * kinectGridSize + x0];
+    const d10_raw = kinectDepthData[y0 * kinectGridSize + x1];
+    const d01_raw = kinectDepthData[y1 * kinectGridSize + x0];
+    const d11_raw = kinectDepthData[y1 * kinectGridSize + x1];
+
+    // Collect valid (non-zero, non-null) depth values
+    const validDepths = [];
+    if (d00_raw && d00_raw !== 0) validDepths.push(Math.abs(d00_raw));
+    if (d10_raw && d10_raw !== 0) validDepths.push(Math.abs(d10_raw));
+    if (d01_raw && d01_raw !== 0) validDepths.push(Math.abs(d01_raw));
+    if (d11_raw && d11_raw !== 0) validDepths.push(Math.abs(d11_raw));
+
+    // If no valid data at any corner, search for nearest valid value
+    if (validDepths.length === 0) {
+        return findNearestValidDepth(gridX, gridY);
+    }
+
+    // Use valid depths or average of valid depths as fallback
+    const avgValidDepth =
+        validDepths.reduce((a, b) => a + b, 0) / validDepths.length;
+    const d00 = d00_raw && d00_raw !== 0 ? Math.abs(d00_raw) : avgValidDepth;
+    const d10 = d10_raw && d10_raw !== 0 ? Math.abs(d10_raw) : avgValidDepth;
+    const d01 = d01_raw && d01_raw !== 0 ? Math.abs(d01_raw) : avgValidDepth;
+    const d11 = d11_raw && d11_raw !== 0 ? Math.abs(d11_raw) : avgValidDepth;
+
+    // Bilinear interpolation
+    let depth;
+    if (fx + fy < 1) {
+        const w0 = 1 - fx - fy;
+        const w1 = fx;
+        const w2 = fy;
+        depth = w0 * d00 + w1 * d10 + w2 * d01;
+    } else {
+        const w0 = fx + fy - 1;
+        const w1 = 1 - fy;
+        const w2 = 1 - fx;
+        depth = w0 * d11 + w1 * d10 + w2 * d01;
+    }
+
+    return depth;
+}
+
+function findNearestValidDepth(targetX, targetY) {
+    if (!kinectDepthData || !kinectGridSize) return 0;
+
+    // Search in expanding radius for nearest valid depth value
+    const maxRadius = Math.max(kinectGridSize / 2, 10);
+
+    for (let radius = 1; radius <= maxRadius; radius++) {
+        const validDepths = [];
+
+        // Check points around the circle at this radius
+        const numPoints = Math.max(8, radius * 4);
+        for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * 2 * Math.PI;
+            const checkX = Math.round(targetX + Math.cos(angle) * radius);
+            const checkY = Math.round(targetY + Math.sin(angle) * radius);
+
+            if (
+                checkX >= 0 &&
+                checkX < kinectGridSize &&
+                checkY >= 0 &&
+                checkY < kinectGridSize
+            ) {
+                const depthValue =
+                    kinectDepthData[checkY * kinectGridSize + checkX];
+                if (depthValue && depthValue !== 0) {
+                    validDepths.push(Math.abs(depthValue));
+                }
+            }
+        }
+
+        // If we found valid depths at this radius, return average
+        if (validDepths.length > 0) {
+            return validDepths.reduce((a, b) => a + b, 0) / validDepths.length;
+        }
+    }
+
+    // If still no valid depth found, return 0
+    return 0;
 }
 
 function updateTerrainParameters() {
@@ -1092,8 +1490,7 @@ function drawTileBordersToBuffer(buffer, scale) {
     const vertexMap = new Map();
     topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
 
-    buffer.stroke(204);
-    buffer.strokeWeight(0.3);
+    buffer.noStroke();
     buffer.noFill();
 
     topoData.tiles.forEach((tile) => {

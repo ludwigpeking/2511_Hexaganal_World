@@ -24,6 +24,62 @@ function drawQuadContours(
     contourInterval,
     waterLevel = -Infinity
 ) {
+    // Check if this specific tile is flat (all 4 vertices have same elevation)
+    const tileMinElev = Math.min(...elevs);
+    const tileMaxElev = Math.max(...elevs);
+    const tileElevRange = tileMaxElev - tileMinElev;
+
+    if (tileElevRange < 0.01) {
+        // Draw flat tile with single color based on its elevation
+        const tileAltitude = tileMinElev;
+
+        // Calculate normalized position within global range to get proper color
+        const globalRange = maxElev - minElev;
+        let normalizedAlt = 0.5; // Default to middle color
+        if (globalRange > 0.01) {
+            normalizedAlt = (tileAltitude - minElev) / globalRange;
+            normalizedAlt = Math.max(0, Math.min(1, normalizedAlt)); // Clamp to 0-1
+        }
+
+        if (tileAltitude <= waterLevel) {
+            ctx.fillStyle = "#001a33";
+            ctx.strokeStyle = "#001a33";
+        } else {
+            const color = getElevationColor(tileAltitude, minElev, maxElev);
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+        }
+
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(verts[0].x, verts[0].y);
+        ctx.lineTo(verts[1].x, verts[1].y);
+        ctx.lineTo(verts[2].x, verts[2].y);
+        ctx.lineTo(verts[3].x, verts[3].y);
+        ctx.closePath();
+        ctx.fill();
+        return;
+    }
+
+    // Draw base layer (for areas below first contour)
+    const lowestElev = tileMinElev;
+    if (lowestElev <= waterLevel) {
+        ctx.fillStyle = "#001a33";
+        ctx.strokeStyle = "#001a33";
+    } else {
+        const color = getElevationColor(lowestElev, minElev, maxElev);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+    }
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(verts[0].x, verts[0].y);
+    ctx.lineTo(verts[1].x, verts[1].y);
+    ctx.lineTo(verts[2].x, verts[2].y);
+    ctx.lineTo(verts[3].x, verts[3].y);
+    ctx.closePath();
+    ctx.fill();
+
     // Iterate through contour levels
     for (
         let altitude = minElev;
@@ -52,20 +108,13 @@ function drawQuadContours(
         // Use dark blue for water levels, elevation colors for land
         if (altitude <= waterLevel) {
             ctx.fillStyle = "#001a33";
-            ctx.strokeStyle = "#002244";
+            ctx.strokeStyle = "#001a33";
         } else {
-            // Calculate color based on altitude
-            const normalizedAlt = (altitude - minElev) / (maxElev - minElev);
-            const hue = 200 - normalizedAlt * 150; // Blue to green to yellow
-            const saturation = 50 - normalizedAlt * 20;
-            const lightness = 40 + normalizedAlt * 40;
-
-            ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-            ctx.strokeStyle = `hsl(${hue - 20}, ${saturation + 20}%, ${
-                lightness - 10
-            }%)`;
+            const color = getElevationColor(altitude, minElev, maxElev);
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
         }
-        ctx.lineWidth = 0.3;
+        ctx.lineWidth = 1.2;
 
         // Draw based on marching squares state
         drawMarchingSquaresCase(ctx, state, verts, a, b, c, d);
@@ -279,8 +328,10 @@ function drawMarchingSquaresCase(ctx, state, verts, a, b, c, d) {
  * @returns {string} HSL color string
  */
 function getElevationColor(elevation, minElev, maxElev) {
-    const t = (elevation - minElev) / (maxElev - minElev);
-    const hue = 200 - t * 150; // Blue to green to yellow
+    const t = (elevation - waterLevel) / (Math.min(maxElev, 300) - waterLevel);
+    // const t = elevation / 300;
+
+    const hue = 190 - t * 150; // Blue to green to yellow
     const saturation = 50 - t * 20;
     const lightness = 40 + t * 40;
     return `hsl(${hue}, ${saturation}%, ${lightness}%)`;

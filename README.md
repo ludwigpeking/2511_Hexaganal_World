@@ -1,3 +1,15 @@
+# An Evolutionary History of the City
+
+Is our city a creation of genuious, or an accumulation of the individual decisions made by our precessors and ourselves?
+This project gives you a opportunity to observe how a city grows, responding only to the nature and local interests, without a master plan, depending on the choice of location make by an induvidual, based on their trades/preferences. Your play the sand with your hands, and you get the new natural settings for your own version of city.
+
+It is a compressing of the process of centuries into an augenblick
+
+It's presentation acquired inspiraiton from The AR sandbox by UC Davis W.M Keck Center, and the game Townscaper by Oskar Stålberg.
+
+It's a physical representation of some of the aspects of the texts the author wrote around urban history:
+https://the-book-an-evolutionary-history-of-the-city.vercel.app/?chapter=0&lang=en
+
 # Quadrangulized Map Generator
 
 A powerful tool for generating procedural quadrangulated (quad-based) maps from hexagonal grids using Lloyd's relaxation algorithm. Originally inspired by the grid system used in Oskar Stålberg's game Townscaper, this generator has been transformed into a complete map creation and export system.

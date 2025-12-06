@@ -169,9 +169,10 @@ function pathFinding(start, end, trafficWeight) {
 
         // Fifth pass: mark ALL vertices as occupied if sum of edge trafficCount >= 12
         // This must check all vertices, not just path vertices, because trafficCount accumulates
+        // Water tiles are NOT marked as occupied by routes
         const updatedVertices = [];
         topoData.vertices.forEach((vertex) => {
-            if (!vertex.occupiedBy) {
+            if (!vertex.occupiedBy && vertex.elevation > waterLevel) {
                 // Calculate sum of all edge traffic counts (same as Traffic Count debug layer)
                 const totalEdgeTraffic = vertex.neighbors.reduce(
                     (sum, n) => sum + (n.trafficCount || 0),
