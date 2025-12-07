@@ -33,25 +33,6 @@ class Settlement {
         vertex.occupiedByRoute = false; // Settlement vertices can have routes start/end here
         vertex.attrition = 500;
 
-        // Update presentation layer if enabled
-        if (
-            typeof showPresentation !== "undefined" &&
-            showPresentation &&
-            typeof redrawVertexQuads !== "undefined" &&
-            presentationBuffer &&
-            patternAtlas
-        ) {
-            const vertexMap = new Map();
-            topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
-            redrawVertexQuads(
-                presentationBuffer,
-                patternAtlas,
-                vertex,
-                topoData.tiles,
-                vertexMap
-            );
-        }
-
         // Remove from habitable
         habitable = habitable.filter((v) => v.index !== vertex.index);
     }
@@ -101,7 +82,7 @@ class Settlement {
         ) {
             this.vertex.vincinityNeighbors.forEach((v) => {
                 if (!v.occupied) {
-                    console.log(v);
+                    // console.log(v);
                     v.garden = this; // Reference to the farmer that owns this garden
                     // Do NOT mark as occupied - gardens are open to pathfinding and settlement
                 }
@@ -223,7 +204,7 @@ function initializeSimulationValues() {
         // Insert all vertices into quadtree for inspector tool
         vertexQuadtree.insert(v);
     });
-    console.log("Quadtree built");
+    // console.log("Quadtree built");
 
     // Calculate initial farmer values (merchant values auto-update via setters)
     calculateFarmerValues();
@@ -319,17 +300,17 @@ function autoPopulate(steps) {
 
     // First create a Lord
     createLord();
-    console.log("Lord created, settlements:", settlements.length);
+    // console.log("Lord created, settlements:", settlements.length);
 
     // Then create other settlements
     for (let i = 0; i < steps; i++) {
         let dice = random(1);
         if (dice < 0.4) {
             createMerchant();
-            console.log("Merchant created, total:", settlements.length);
+            // console.log("Merchant created, total:", settlements.length);
         } else {
             createFarmer();
-            console.log("Farmer created, total:", settlements.length);
+            // console.log("Farmer created, total:", settlements.length);
         }
     }
 
@@ -339,11 +320,11 @@ function autoPopulate(steps) {
 }
 
 function createLord() {
-    if (habitable.length === 0) {
-        console.error("No habitable vertices for Lord");
+    if (!habitable || habitable.length === 0) {
+        // console.error("No habitable vertices for Lord");
         return;
     }
-    console.log("Creating Lord from", habitable.length, "habitable vertices");
+    // console.log("Creating Lord from", habitable.length, "habitable vertices");
 
     // Use p5.js built-in width and height variables
     const canvasWidth = width;
@@ -726,18 +707,18 @@ function calculateFarmValue() {
 
 function calculateMerchantValue() {
     // This function is now just for traversing - actual calculation happens in vertex
-    console.log("calculateMerchantValue called (traversing vertices)");
+    // console.log("calculateMerchantValue called (traversing vertices)");
     let count = 0;
     vertices.forEach((v) => {
         v.updateMerchantValue();
         if (v.merchantValue > 0) count++;
     });
-    console.log(`Updated merchant values: ${count} vertices with value > 0`);
+    // console.log(`Updated merchant values: ${count} vertices with value > 0`);
 }
 
 function calculateFarmerValues() {
     if (!vertexQuadtree) {
-        console.warn("Quadtree not initialized, using fallback calculation");
+        // console.warn("Quadtree not initialized, using fallback calculation");
         vertices.forEach((vertex) => {
             vertex.calculateFarmerValue(vertex.farmValue, 0);
         });
@@ -832,7 +813,7 @@ function drawSettlements() {
         return;
     }
 
-    console.log("Drawing", settlements.length, "settlements");
+    // console.log("Drawing", settlements.length, "settlements");
 
     settlements.forEach((settlement, index) => {
         try {

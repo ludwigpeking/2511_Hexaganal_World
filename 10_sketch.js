@@ -30,8 +30,28 @@ let hexMapData = null; // Store original hex map structure
 
 // Presentation layer
 let patternAtlas = null; // The texture atlas image
-let presentationBuffer = null; // Buffer for rendering textured quads
-let needsRedrawPresentation = true;
+let presentationBuffer = null; // Single buffer for presentation layer
+
+// Sea background
+let seaImage = null;
+let seaMaskGraphics = null; // Graphics buffer for hexagon mask
+
+// Cloud animation
+let cloudImage = null;
+let cloudX = 0;
+let cloudY = 0;
+let cloud2X = 0; // Second cloud instance
+let cloud2Y = 0;
+let showCloud2 = false; // Whether to show second cloud
+const CLOUD_SPEED = 0.1; // pixels per frame (2x faster)
+const CLOUD_ANGLE = 50; // degrees from right (up-right direction)
+const CLOUD_SCALE = 3; // scale factor for cloud image
+
+// Auto-simulation
+let isFirstAutoSpawn = true; // Track if first settlement has been spawned
+let autoSimulationActive = false; // Track if auto-simulation is running
+let autoSimFrameCounter = 0; // Count frames for spawning
+const AUTO_SIM_SPAWN_INTERVAL = 20; // Spawn every 20 frames
 
 // Graphics buffers for performance
 let elevationBuffer = null;
@@ -48,18 +68,36 @@ let lastStaticState = {};
 async function setup() {
     // Load pattern atlas
     patternAtlas = await loadImage("assets/pattern_atlas.png");
-    console.log(
-        "Pattern atlas loaded:",
-        patternAtlas.width,
-        "x",
-        patternAtlas.height
-    );
+    // console.log(
+    //     "Pattern atlas loaded:",
+    //     patternAtlas.width,
+    //     "x",
+    //     patternAtlas.height
+    // );
+
+    // Load sea background image
+    seaImage = await loadImage("assets/sky_and_sea/sea_1.png");
+    // console.log("Sea image loaded:", seaImage.width, "x", seaImage.height);
+
+    // Load cloud image
+    cloudImage = await loadImage("assets/sky_and_sea/cloud.png");
+    // console.log(
+    //     "Cloud image loaded:",
+    //     cloudImage.width,
+    //     "x",
+    //     cloudImage.height
+    // );
+
+    // Initialize cloud position (start from bottom-left, off-canvas)
+    cloudX = -cloudImage.width * CLOUD_SCALE - 500;
+    cloudY = 1080; // Start below canvas
 
     // Load JSON first to get canvas dimensions
     await loadDefaultMap();
 
     // Canvas size is set in processData() after JSON is loaded
-    noLoop(); // We'll redraw manually when needed
+    // Keep loop running for cloud animation
+    loop();
 
     // Set up event listeners
     select("#loadFileBtn").mousePressed(() => {
@@ -101,6 +139,19 @@ async function setup() {
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
     select("#toggleKinectBtn").mousePressed(toggleKinect);
 
+    // Toggle debug panel button
+    select("#toggleDebugBtn").mousePressed(() => {
+        const panel = select("#right-panel");
+        if (panel.hasClass("hidden")) {
+            panel.removeClass("hidden");
+        } else {
+            panel.addClass("hidden");
+        }
+    });
+
+    // Auto-simulation button
+    select("#autoSimBtn").mousePressed(toggleAutoSimulation);
+
     // Initialize mouse play UI
     initializeMousePlayUI();
 }
@@ -118,6 +169,16 @@ function draw() {
         debugLayersBuffer = createGraphics(width, height);
         staticContentBuffer = createGraphics(width, height);
         presentationBuffer = createGraphics(width, height);
+        seaMaskGraphics = createGraphics(width, height);
+
+        // Draw initial presentation layer
+        drawPresentationLayerToBuffer(
+            presentationBuffer,
+            topoData.mapping.hexToCanvasScale
+        );
+
+        // Create hexagon mask
+        createHexagonMask();
     }
 
     const scale = topoData.mapping.hexToCanvasScale;
@@ -162,7 +223,6 @@ function draw() {
     // Check if static layers state changed
     const staticState = {
         showTraffic,
-        showRoutes,
         showVertices,
     };
     const staticStateChanged =
@@ -172,7 +232,54 @@ function draw() {
         lastStaticState = staticState;
     }
 
-    background(255);
+    background(0);
+
+    // Auto-simulation: spawn settlements every 5 frames
+    if (autoSimulationActive) {
+        // Stop if reached 600 settlements or no habitable tiles
+        if (settlements.length >= 600) {
+            autoSimulationActive = false;
+            autoSimFrameCounter = 0;
+            const btn = select("#autoSimBtn");
+            if (btn) {
+                btn.removeClass("active");
+                btn.html("▶️ Auto Sim");
+            }
+            updateProgress("Auto-simulation stopped: 600 settlements reached");
+        } else {
+            autoSimFrameCounter++;
+            if (autoSimFrameCounter >= AUTO_SIM_SPAWN_INTERVAL) {
+                autoSimFrameCounter = 0;
+                // Check if there are habitable tiles before spawning
+                populateHabitableArray();
+                if (habitable.length > 0) {
+                    runSimulationStep();
+                } else {
+                    // Stop if no habitable tiles
+                    autoSimulationActive = false;
+                    autoSimFrameCounter = 0;
+                    const btn = select("#autoSimBtn");
+                    if (btn) {
+                        btn.removeClass("active");
+                        btn.html("▶️ Auto Sim");
+                    }
+                    updateProgress(
+                        "Auto-simulation stopped: no habitable tiles available"
+                    );
+                }
+            }
+        }
+    }
+
+    // Draw sea background image with hexagon mask
+    if (seaImage && seaMaskGraphics) {
+        push();
+        // Use the mask to clip sea image to hexagon shape
+        let maskedSea = seaImage.get();
+        maskedSea.mask(seaMaskGraphics);
+        image(maskedSea, 0, 0);
+        pop();
+    }
 
     // Draw elevation layer (cached)
     if (showElevation) {
@@ -233,7 +340,6 @@ function draw() {
     if (needsRedrawStatic) {
         staticContentBuffer.clear();
         if (showTraffic) drawTrafficHeatmapToBuffer(staticContentBuffer, scale);
-        if (showRoutes) drawRoutesToBuffer(staticContentBuffer, scale);
         if (showVertices) drawVerticesToBuffer(staticContentBuffer, scale);
         drawRouteEndpointsToBuffer(staticContentBuffer, scale);
         drawSteepSlopesToBuffer(staticContentBuffer);
@@ -247,21 +353,56 @@ function draw() {
         drawSettlements();
     }
 
-    // Draw presentation layer with textured quads on top of everything (cached)
+    // Draw presentation layer with textured quads on top of everything
     if (showPresentation && patternAtlas) {
-        console.log(
-            "Presentation layer enabled, atlas loaded:",
-            patternAtlas.width,
-            "x",
-            patternAtlas.height
-        );
-        if (needsRedrawPresentation) {
-            console.log("Redrawing presentation buffer");
-            presentationBuffer.clear();
-            drawPresentationLayerToBuffer(presentationBuffer, scale);
-            needsRedrawPresentation = false;
-        }
         image(presentationBuffer, 0, 0);
+    }
+
+    // Draw animated cloud layer on top
+    if (cloudImage) {
+        // Calculate movement deltas based on angle
+        // 50 degrees from right = 90 - 50 = 40 degrees from horizontal
+        const angleRad = (40 * Math.PI) / 180;
+        const dx = CLOUD_SPEED * Math.cos(angleRad);
+        const dy = -CLOUD_SPEED * Math.sin(angleRad); // negative because y increases downward
+
+        // Update cloud position
+        cloudX += dx;
+        cloudY += dy;
+
+        // Calculate scaled dimensions
+        const scaledWidth = cloudImage.width * CLOUD_SCALE;
+        const scaledHeight = cloudImage.height * CLOUD_SCALE;
+
+        // When first cloud is 2/3 out of frame, start showing second cloud
+        if (
+            cloudX > 1920 - scaledWidth / 3 ||
+            cloudY < (-scaledHeight * 2) / 3
+        ) {
+            if (!showCloud2) {
+                // Initialize second cloud at starting position
+                cloud2X = -scaledWidth - 500;
+                cloud2Y = 1080;
+                showCloud2 = true;
+            }
+        }
+
+        // When first cloud is completely off screen, reset it and hide second cloud
+        if (cloudX > 1920 + scaledWidth || cloudY < -scaledHeight) {
+            cloudX = cloud2X;
+            cloudY = cloud2Y;
+            showCloud2 = false;
+        }
+
+        // Draw first cloud at 3x scale
+        image(cloudImage, cloudX, cloudY, scaledWidth, scaledHeight);
+
+        // Draw second cloud if active
+        if (showCloud2) {
+            cloud2X += dx;
+            cloud2Y += dy;
+            image(cloudImage, cloud2X, cloud2Y, scaledWidth, scaledHeight);
+        }
     }
 
     // Draw vertex inspector (always on top, always fresh)
@@ -270,13 +411,48 @@ function draw() {
     }
 }
 
+function createHexagonMask() {
+    if (!seaMaskGraphics || !tiles || !vertices) return;
+
+    seaMaskGraphics.clear();
+    seaMaskGraphics.fill(255);
+    seaMaskGraphics.noStroke();
+
+    const vertexMap = new Map();
+    vertices.forEach((v) => vertexMap.set(v.index, v));
+
+    // Draw all tiles as white shapes to create mask
+    tiles.forEach((tile) => {
+        const tileVertices = tile.vertexIndices.map((vIndex) =>
+            vertexMap.get(vIndex)
+        );
+        if (tileVertices.some((v) => !v)) return;
+
+        seaMaskGraphics.beginShape();
+        tileVertices.forEach((v) => {
+            seaMaskGraphics.vertex(v.x, v.y);
+        });
+        seaMaskGraphics.endShape(CLOSE);
+    });
+}
+
 function invalidateBuffers(which = "all") {
     if (which === "all" || which === "elevation") needsRedrawElevation = true;
     if (which === "all" || which === "tiles") needsRedrawTiles = true;
     if (which === "all" || which === "debug") needsRedrawDebugLayers = true;
     if (which === "all" || which === "static") needsRedrawStatic = true;
-    if (which === "all" || which === "presentation")
-        needsRedrawPresentation = true;
+    if (which === "all" || which === "presentation") {
+        updatePresentationLayer();
+    }
+}
+
+function updatePresentationLayer() {
+    if (!presentationBuffer || !patternAtlas) return;
+
+    // Clear and redraw presentation layer immediately
+    presentationBuffer.clear();
+    const scale = topoData ? topoData.mapping.hexToCanvasScale : 1;
+    drawPresentationLayerToBuffer(presentationBuffer, scale);
 }
 
 function mouseClicked() {
@@ -421,14 +597,14 @@ async function fetchKinectDepth() {
 
         // Validate data
         if (!Array.isArray(data) || data.length === 0) {
-            console.warn("Empty kinect data received");
+            // console.warn("Empty kinect data received");
             return;
         }
 
         // Detect grid size
         const size = Math.sqrt(data.length);
         if (size % 1 !== 0) {
-            console.error(`Invalid kinect data length: ${data.length}`);
+            // console.error(`Invalid kinect data length: ${data.length}`);
             return;
         }
 
@@ -451,7 +627,7 @@ async function fetchKinectDepth() {
             `Kinect update ${kinectUpdateCount} - ${new Date().toLocaleTimeString()}`
         );
     } catch (error) {
-        console.error("Kinect fetch error:", error);
+        // console.error("Kinect fetch error:", error);
     }
 }
 
@@ -788,9 +964,9 @@ function processData() {
     // Clear steep slopes from previous data
     steepSlopes = [];
 
-    // Create or resize canvas based on JSON mapping
-    const canvasWidth = topoData.mapping.canvasWidth;
-    const canvasHeight = topoData.mapping.canvasHeight;
+    // Create or resize canvas to fixed 1920x1080 resolution
+    const canvasWidth = 1920;
+    const canvasHeight = 1080;
 
     if (!canvasCreated) {
         // First time: create canvas in 2D mode (default)
@@ -947,7 +1123,7 @@ function findEdgeVertices() {
         }
     });
 
-    console.log(`Found ${edgeVertices.length} edge vertices`);
+    // console.log(`Found ${edgeVertices.length} edge vertices`);
 }
 
 function drawTilesWithElevation(scale) {
@@ -1300,39 +1476,59 @@ function runSimulationStep() {
 
     simulationStep++;
     updateSimStats();
-    updateProgress(`Simulation step ${simulationStep} completed`);
 
-    if (simulationStep % 5 === 0 && routes.length < 10) {
-        createRandomRoute();
+    // First spawn is always a lord
+    if (isFirstAutoSpawn) {
+        addLordSettlement();
+        isFirstAutoSpawn = false;
+    } else {
+        // Subsequent spawns with probability
+        const spawnChance = Math.random();
+        if (spawnChance < 0.5) {
+            // 50% chance to spawn farmer
+            addFarmerSettlement();
+        } else if (spawnChance < 0.99) {
+            // 49% chance to spawn merchant
+            addMerchantSettlement();
+        } else {
+            // 1% chance to spawn lord
+            addLordSettlement();
+        }
     }
+
+    updateProgress(`Simulation step ${simulationStep} completed`);
 }
 
 function toggleAutoSimulation() {
-    const isEnabled = select("#autoSimulate").checked();
+    const btn = select("#autoSimBtn");
 
-    if (isEnabled) {
+    if (autoSimulationActive) {
+        // Stop auto-simulation
+        autoSimulationActive = false;
+        autoSimFrameCounter = 0;
+        btn.removeClass("active");
+        btn.html("▶️ Auto Sim");
+        updateProgress("Auto-simulation disabled");
+    } else {
+        // Start auto-simulation
         if (!topoData) {
             alert("Please load map data first!");
-            select("#autoSimulate").checked(false);
             return;
         }
 
-        const speed = parseInt(select("#simSpeed").value());
-        const interval = 1000 / speed;
-
-        autoSimInterval = setInterval(runSimulationStep, interval);
+        autoSimulationActive = true;
+        autoSimFrameCounter = 0;
+        btn.addClass("active");
+        btn.html("⏸️ Auto Sim");
         updateProgress("Auto-simulation enabled");
-    } else {
-        if (autoSimInterval) {
-            clearInterval(autoSimInterval);
-            autoSimInterval = null;
-        }
-        updateProgress("Auto-simulation disabled");
     }
 }
 
 function resetSimulation() {
     simulationStep = 0;
+    isFirstAutoSpawn = true;
+    autoSimulationActive = false;
+    autoSimFrameCounter = 0;
     clearRoutes();
     clearSettlements();
 
@@ -1340,6 +1536,12 @@ function resetSimulation() {
         clearInterval(autoSimInterval);
         autoSimInterval = null;
         select("#autoSimulate").checked(false);
+    }
+
+    const btn = select("#autoSimBtn");
+    if (btn) {
+        btn.removeClass("active");
+        btn.html("▶️ Auto Sim");
     }
 
     updateSimStats();
@@ -1359,6 +1561,7 @@ function addLordSettlement() {
     updateProgress(`Lord created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
+    invalidateBuffers("presentation");
     redraw();
 }
 
@@ -1380,6 +1583,7 @@ function addFarmerSettlement() {
     updateProgress(`Farmer created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
+    invalidateBuffers("presentation");
     redraw();
 }
 
@@ -1401,6 +1605,7 @@ function addMerchantSettlement() {
     updateProgress(`Merchant created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
+    invalidateBuffers("presentation");
     redraw();
 }
 
@@ -1438,20 +1643,13 @@ function drawTilesWithElevationToBuffer(buffer, scale) {
 
 function drawPresentationLayerToBuffer(buffer, scale) {
     if (!patternAtlas) {
-        console.warn("Pattern atlas not loaded");
+        // console.warn("Pattern atlas not loaded");
         return;
     }
-
-    console.log(
-        "Drawing presentation layer, tiles count:",
-        topoData.tiles.length
-    );
-    console.log("Buffer dimensions:", buffer.width, "x", buffer.height);
 
     const vertexMap = new Map();
     vertices.forEach((v) => vertexMap.set(v.index, v));
 
-    let drawnCount = 0;
     topoData.tiles.forEach((tile) => {
         const tileVertices = tile.vertexIndices.map((vIndex) =>
             vertexMap.get(vIndex)
@@ -1481,9 +1679,7 @@ function drawPresentationLayerToBuffer(buffer, scale) {
             uvs,
             signature
         );
-        drawnCount++;
     });
-    console.log("Drew", drawnCount, "textured quads");
 }
 
 function drawTileBordersToBuffer(buffer, scale) {
@@ -1767,9 +1963,9 @@ function drawFarmerValueLayerToBuffer(buffer) {
 }
 
 function drawMerchantValueLayerToBuffer(buffer) {
-    console.log("drawMerchantValueLayerToBuffer called");
+    // console.log("drawMerchantValueLayerToBuffer called");
     if (!vertices || vertices.length === 0) {
-        console.log("  No vertices available");
+        // console.log("  No vertices available");
         return;
     }
 
@@ -1786,13 +1982,13 @@ function drawMerchantValueLayerToBuffer(buffer) {
         if (v.security > 0) verticesWithSecurity++;
     });
 
-    console.log(`  Max merchant value: ${maxMerchantValue}`);
-    console.log(`  Vertices with merchantValue > 0: ${verticesWithMerchant}`);
-    console.log(`  Vertices with trafficValue > 0: ${verticesWithTraffic}`);
-    console.log(`  Vertices with security > 0: ${verticesWithSecurity}`);
+    // console.log(`  Max merchant value: ${maxMerchantValue}`);
+    // console.log(`  Vertices with merchantValue > 0: ${verticesWithMerchant}`);
+    // console.log(`  Vertices with trafficValue > 0: ${verticesWithTraffic}`);
+    // console.log(`  Vertices with security > 0: ${verticesWithSecurity}`);
 
     if (maxMerchantValue === 0) {
-        console.log("  Returning early: maxMerchantValue is 0");
+        // console.log("  Returning early: maxMerchantValue is 0");
         return;
     }
     buffer.colorMode(HSB);

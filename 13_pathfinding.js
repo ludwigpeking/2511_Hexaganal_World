@@ -346,14 +346,14 @@ function createHardcodedRoute(startIndex, endIndex) {
     const end = topoData.vertices.find((v) => v.index === endIndex);
 
     if (!start || !end) {
-        console.error(`Could not find vertices ${startIndex} or ${endIndex}`);
+        // console.error(`Could not find vertices ${startIndex} or ${endIndex}`);
         return;
     }
 
     // Set global trade destinations
     tradeDestination1 = start;
     tradeDestination2 = end;
-    console.log(`Trade destinations set: ${startIndex} and ${endIndex}`);
+    // console.log(`Trade destinations set: ${startIndex} and ${endIndex}`);
 
     const trafficWeight = parseFloat(select("#trafficWeight").value());
 

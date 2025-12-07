@@ -61,28 +61,13 @@ function drawQuadContours(
         return;
     }
 
-    // Draw base layer (for areas below first contour)
-    const lowestElev = tileMinElev;
-    if (lowestElev <= waterLevel) {
-        ctx.fillStyle = "#001a33";
-        ctx.strokeStyle = "#001a33";
-    } else {
-        const color = getElevationColor(lowestElev, minElev, maxElev);
-        ctx.fillStyle = color;
-        ctx.strokeStyle = color;
-    }
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(verts[0].x, verts[0].y);
-    ctx.lineTo(verts[1].x, verts[1].y);
-    ctx.lineTo(verts[2].x, verts[2].y);
-    ctx.lineTo(verts[3].x, verts[3].y);
-    ctx.closePath();
-    ctx.fill();
+    // Skip drawing base layer - water will be handled by sea image background
 
-    // Iterate through contour levels
+    // Iterate through contour levels - only draw land above waterLevel
+    // Start from first contour above water level
+    const firstLandAltitude = waterLevel + contourInterval;
     for (
-        let altitude = minElev;
+        let altitude = firstLandAltitude;
         altitude < maxElev;
         altitude += contourInterval
     ) {
@@ -105,15 +90,10 @@ function drawQuadContours(
         // Determine marching squares state
         const state = getMarchingSquaresState(f0, f1, f2, f3);
 
-        // Use dark blue for water levels, elevation colors for land
-        if (altitude <= waterLevel) {
-            ctx.fillStyle = "#001a33";
-            ctx.strokeStyle = "#001a33";
-        } else {
-            const color = getElevationColor(altitude, minElev, maxElev);
-            ctx.fillStyle = color;
-            ctx.strokeStyle = color;
-        }
+        // Only draw land elevation colors (no water levels)
+        const color = getElevationColor(altitude, minElev, maxElev);
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
         ctx.lineWidth = 1.2;
 
         // Draw based on marching squares state

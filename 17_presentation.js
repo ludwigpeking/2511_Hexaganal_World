@@ -80,7 +80,7 @@ function getQuadSignature(tl, tr, br, bl) {
  */
 function getTileUVs(signature) {
     if (signature.length !== 4) {
-        console.error("Invalid signature length:", signature);
+        // console.error("Invalid signature length:", signature);
         return {
             tl: { u: 0, v: 0 },
             tr: { u: 1 / ATLAS_SIZE, v: 0 },
@@ -93,9 +93,9 @@ function getTileUVs(signature) {
     const digits = signature.split("").map((char) => {
         const digit = symbolMap[char];
         if (digit === undefined) {
-            console.warn(
-                `Unknown symbol '${char}' in signature '${signature}'`
-            );
+            // console.warn(
+            //     `Unknown symbol '${char}' in signature '${signature}'`
+            // );
             return 0;
         }
         return digit;
@@ -159,10 +159,10 @@ function mapTriangle(
 ) {
     // Debug: log first call only
     if (!mapTriangle.logged) {
-        console.log("mapTriangle called");
-        console.log("img element:", img);
-        console.log("Source:", sx1, sy1, sx2, sy2, sx3, sy3);
-        console.log("Dest:", dx1, dy1, dx2, dy2, dx3, dy3);
+        // console.log("mapTriangle called");
+        // console.log("img element:", img);
+        // console.log("Source:", sx1, sy1, sx2, sy2, sx3, sy3);
+        // console.log("Dest:", dx1, dy1, dx2, dy2, dx3, dy3);
     }
 
     ctx.save();
@@ -188,7 +188,7 @@ function mapTriangle(
     const denom = x0 * (y2 - y1) - x1 * y2 + x2 * y1 + (x1 - x2) * y0;
 
     if (!mapTriangle.logged) {
-        console.log("denom:", denom);
+        // console.log("denom:", denom);
     }
 
     if (Math.abs(denom) > 0.001) {
@@ -216,8 +216,8 @@ function mapTriangle(
             denom;
 
         if (!mapTriangle.logged) {
-            console.log("Transform matrix:", m11, m12, m21, m22, dx, dy);
-            console.log("About to drawImage...");
+            // console.log("Transform matrix:", m11, m12, m21, m22, dx, dy);
+            // console.log("About to drawImage...");
             mapTriangle.logged = true;
         }
 
@@ -228,12 +228,12 @@ function mapTriangle(
         ctx.drawImage(imageElement, 0, 0);
 
         if (mapTriangle.logged && !mapTriangle.completedLogged) {
-            console.log("drawImage completed");
+            // console.log("drawImage completed");
             mapTriangle.completedLogged = true;
         }
     } else {
         if (!mapTriangle.logged) {
-            console.log("Skipped: denom too small");
+            // console.log("Skipped: denom too small");
         }
     }
     ctx.restore();
@@ -271,6 +271,28 @@ function drawTexturedQuad2D(buffer, atlas, tl, tr, br, bl, uvs, signature) {
     // Use .canvas property for p5.Image objects loaded with loadImage()
     tempCtx.drawImage(atlas.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
+    // Helper function to slightly expand a point away from center
+    const expand = (px, py, cx, cy, amount = 0.5) => {
+        const dx = px - cx;
+        const dy = py - cy;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len < 0.001) return { x: px, y: py };
+        return {
+            x: px + (dx / len) * amount,
+            y: py + (dy / len) * amount,
+        };
+    };
+
+    // Calculate quad center for expansion reference
+    const cx = (tl.x + tr.x + br.x + bl.x) / 4;
+    const cy = (tl.y + tr.y + br.y + bl.y) / 4;
+
+    // Expand vertices slightly to prevent gaps
+    const tlExp = expand(tl.x, tl.y, cx, cy);
+    const trExp = expand(tr.x, tr.y, cx, cy);
+    const brExp = expand(br.x, br.y, cx, cy);
+    const blExp = expand(bl.x, bl.y, cx, cy);
+
     // Now map the temp canvas (which starts at 0,0) to the quad using triangles
     // Triangle 1: TL -> TR -> BR
     mapTriangle(
@@ -282,12 +304,12 @@ function drawTexturedQuad2D(buffer, atlas, tl, tr, br, bl, uvs, signature) {
         0,
         sw,
         sh, // Source: top-left corner of temp canvas
-        tl.x,
-        tl.y,
-        tr.x,
-        tr.y,
-        br.x,
-        br.y // Destination triangle
+        tlExp.x,
+        tlExp.y,
+        trExp.x,
+        trExp.y,
+        brExp.x,
+        brExp.y // Destination triangle (expanded)
     );
 
     // Triangle 2: TL -> BR -> BL
@@ -300,12 +322,12 @@ function drawTexturedQuad2D(buffer, atlas, tl, tr, br, bl, uvs, signature) {
         sh,
         0,
         sh, // Source: top-left corner of temp canvas
-        tl.x,
-        tl.y,
-        br.x,
-        br.y,
-        bl.x,
-        bl.y // Destination triangle
+        tlExp.x,
+        tlExp.y,
+        brExp.x,
+        brExp.y,
+        blExp.x,
+        blExp.y // Destination triangle (expanded)
     );
 }
 

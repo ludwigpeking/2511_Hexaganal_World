@@ -76,7 +76,7 @@ class MapTransformer {
      * @returns {Object} Complete topo structure
      */
     transform(elevationGetter) {
-        console.log("Starting map transformation...");
+        // console.log("Starting map transformation...");
 
         this.calculateHexBounds();
         this.calculateMapping();
@@ -92,11 +92,11 @@ class MapTransformer {
             };
         });
 
-        console.log(`Mapped ${this.mappedVertices.length} vertices`);
+        // console.log(`Mapped ${this.mappedVertices.length} vertices`);
 
         // Calculate edge data (distances, slopes) using neighbors from map_3.json
         this.calculateEdgeData();
-        console.log("Calculated edge data");
+        // console.log("Calculated edge data");
 
         // Build final topo structure
         return this.buildTopoStructure();
@@ -189,10 +189,10 @@ class MapTransformer {
  */
 function createKinectElevationGetter(depthData, gridSize, mapBounds) {
     // Log the kinect resolution being used (adaptive to any grid size)
-    console.log(
-        `[createKinectElevationGetter] Kinect resolution: ${gridSize}x${gridSize} (${depthData.length} points)`
-    );
-    console.log(`[createKinectElevationGetter] Map bounds:`, mapBounds);
+    // console.log(
+    //     `[createKinectElevationGetter] Kinect resolution: ${gridSize}x${gridSize} (${depthData.length} points)`
+    // );
+    // console.log(`[createKinectElevationGetter] Map bounds:`, mapBounds);
 
     return (hexX, hexY) => {
         // Normalize hex coordinates to depth grid [0, 1]

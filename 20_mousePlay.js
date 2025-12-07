@@ -16,7 +16,7 @@ function initializeMousePlayUI() {
     // Get the caste container to insert buttons before it
     const casteContainer = document.getElementById("caste-group");
     if (!casteContainer) {
-        console.error("Caste group container not found");
+        // console.error("Caste group container not found");
         return;
     }
 
@@ -68,7 +68,7 @@ function initializeMousePlayUI() {
     // Insert before caste container
     casteContainer.parentNode.insertBefore(mouseModeContainer, casteContainer);
 
-    console.log("Mouse play UI initialized");
+    // console.log("Mouse play UI initialized");
 }
 
 /**
@@ -172,7 +172,7 @@ function placeRoad(vertex) {
     // For now, just mark vertex as occupied by a "road" placeholder
     vertex.occupied = true;
     vertex.occupiedByRoute = true;
-    console.log(`Placed road marker at vertex ${vertex.index}`);
+    // console.log(`Placed road marker at vertex ${vertex.index}`);
 
     updateProgress(`Road marker placed at vertex ${vertex.index}`);
 }
@@ -196,7 +196,7 @@ function placeCastle(vertex) {
     castleVertices.push(vertex);
     lord.createAnnexes();
 
-    console.log(`Placed castle at vertex ${vertex.index}`);
+    // console.log(`Placed castle at vertex ${vertex.index}`);
     updateProgress(`Castle placed at vertex ${vertex.index}`);
 }
 
@@ -218,7 +218,7 @@ function placeFarmer(vertex) {
     settlements.push(farmer);
     farmer.createGardens(); // Farmers create gardens, not annexes
 
-    console.log(`Placed farmer at vertex ${vertex.index}`);
+    // console.log(`Placed farmer at vertex ${vertex.index}`);
     updateProgress(`Farmer placed at vertex ${vertex.index}`);
 }
 
@@ -240,7 +240,7 @@ function placeMerchant(vertex) {
     settlements.push(merchant);
     // Merchants don't create annexes or gardens
 
-    console.log(`Placed merchant at vertex ${vertex.index}`);
+    // console.log(`Placed merchant at vertex ${vertex.index}`);
     updateProgress(`Merchant placed at vertex ${vertex.index}`);
 }
 
@@ -277,9 +277,9 @@ function deleteOwner(vertex) {
         // Remove settlement
         settlements.splice(settlementIndex, 1);
 
-        console.log(
-            `Deleted ${settlement.profession} from vertex ${vertex.index}`
-        );
+        // console.log(
+        //     `Deleted ${settlement.profession} from vertex ${vertex.index}`
+        // );
         updateProgress(
             `Deleted ${settlement.profession} from vertex ${vertex.index}`
         );
@@ -287,7 +287,7 @@ function deleteOwner(vertex) {
         // Just clear route marker
         vertex.occupied = false;
         vertex.occupiedByRoute = false;
-        console.log(`Deleted road marker from vertex ${vertex.index}`);
+        // console.log(`Deleted road marker from vertex ${vertex.index}`);
         updateProgress(`Deleted road marker from vertex ${vertex.index}`);
     } else {
         updateProgress(`Vertex ${vertex.index} has no settlement to delete`);

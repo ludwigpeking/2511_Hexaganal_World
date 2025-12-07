@@ -44,7 +44,7 @@ function drawSecurityValue() {
         if (v.security > maxSecurity) maxSecurity = v.security;
     });
 
-    console.log(`Security layer: maxSecurity=${maxSecurity}`);
+    // console.log(`Security layer: maxSecurity=${maxSecurity}`);
 
     if (maxSecurity === 0) return; // Nothing to show
 
@@ -154,9 +154,9 @@ function drawFarmerValueLayer() {
 }
 
 function drawMerchantValueLayer() {
-    console.log("drawMerchantValueLayer called");
+    // console.log("drawMerchantValueLayer called");
     if (!vertices || vertices.length === 0) {
-        console.log("No vertices available");
+        // console.log("No vertices available");
         return;
     }
 
@@ -168,12 +168,12 @@ function drawMerchantValueLayer() {
         if (v.merchantValue > 0) verticesWithMerchantValue++;
     });
 
-    console.log(
-        `Merchant layer: ${verticesWithMerchantValue} vertices with value > 0, max=${maxMerchantValue}`
-    );
+    // console.log(
+    //     `Merchant layer: ${verticesWithMerchantValue} vertices with value > 0, max=${maxMerchantValue}`
+    // );
 
     if (maxMerchantValue === 0) {
-        console.log("No merchant value to display");
+        // console.log("No merchant value to display");
         return; // Nothing to show
     }
 
@@ -204,9 +204,9 @@ function drawMerchantValueLayer() {
 }
 
 function drawSteepnessLayer() {
-    console.log("drawSteepnessLayer called");
+    // console.log("drawSteepnessLayer called");
     if (!vertices || vertices.length === 0) {
-        console.log("No vertices available");
+        // console.log("No vertices available");
         return;
     }
 
@@ -222,12 +222,12 @@ function drawSteepnessLayer() {
         }
     });
 
-    console.log(
-        `Steepness layer: ${verticesWithSteepness} vertices, min=${minSteepness}, max=${maxSteepness}`
-    );
+    // console.log(
+    //     `Steepness layer: ${verticesWithSteepness} vertices, min=${minSteepness}, max=${maxSteepness}`
+    // );
 
     if (verticesWithSteepness === 0 || maxSteepness === 0) {
-        console.log("No steepness data to display");
+        // console.log("No steepness data to display");
         return; // Nothing to show
     }
 
