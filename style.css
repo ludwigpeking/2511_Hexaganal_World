@@ -42,9 +42,9 @@ canvas {
     height: 1080px !important;
 }
 
-#toggleDebugBtn {
+/* Round button base style */
+.round-btn {
     position: fixed;
-    top: 20px;
     right: 20px;
     width: 50px;
     height: 50px;
@@ -55,33 +55,31 @@ canvas {
     cursor: pointer;
     z-index: 1001;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s;
+    transition: transform 0.2s, background-color 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-#toggleDebugBtn:hover {
+.round-btn:hover {
     transform: scale(1.1);
 }
 
+.round-btn.active {
+    background-color: rgba(100, 100, 100, 0.9);
+}
+
+#toggleDebugBtn {
+    top: 20px;
+}
+
 #autoSimBtn {
-    position: fixed;
     top: 80px;
-    right: 20px;
-    padding: 10px 20px;
     background-color: rgba(76, 175, 80, 0.9);
-    color: white;
-    border: 2px solid #333;
-    border-radius: 25px;
-    font-size: 14px;
-    font-weight: bold;
-    cursor: pointer;
-    z-index: 1001;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: background-color 0.3s, transform 0.2s;
 }
 
 #autoSimBtn:hover {
     background-color: rgba(56, 142, 60, 1);
-    transform: scale(1.05);
 }
 
 #autoSimBtn.active {
@@ -89,6 +87,56 @@ canvas {
 }
 
 #autoSimBtn.active:hover {
+    background-color: rgba(211, 47, 47, 1);
+}
+
+#mouseModeRoad {
+    top: 140px;
+    background-color: rgba(158, 158, 158, 0.9);
+}
+
+#mouseModeRoad:hover,
+#mouseModeRoad.active {
+    background-color: rgba(97, 97, 97, 1);
+}
+
+#mouseModeCastle {
+    top: 200px;
+    background-color: rgba(156, 39, 176, 0.9);
+}
+
+#mouseModeCastle:hover,
+#mouseModeCastle.active {
+    background-color: rgba(123, 31, 162, 1);
+}
+
+#mouseModeFarmer {
+    top: 260px;
+    background-color: rgba(139, 195, 74, 0.9);
+}
+
+#mouseModeFarmer:hover,
+#mouseModeFarmer.active {
+    background-color: rgba(104, 159, 56, 1);
+}
+
+#mouseModeMerchant {
+    top: 320px;
+    background-color: rgba(255, 193, 7, 0.9);
+}
+
+#mouseModeMerchant:hover,
+#mouseModeMerchant.active {
+    background-color: rgba(255, 160, 0, 1);
+}
+
+#mouseModeDelete {
+    top: 380px;
+    background-color: rgba(244, 67, 54, 0.9);
+}
+
+#mouseModeDelete:hover,
+#mouseModeDelete.active {
     background-color: rgba(211, 47, 47, 1);
 }
 

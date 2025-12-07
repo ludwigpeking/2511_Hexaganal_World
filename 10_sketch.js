@@ -75,8 +75,8 @@ async function setup() {
     //     patternAtlas.height
     // );
 
-    // Load sea background image
-    seaImage = await loadImage("assets/sky_and_sea/sea_1.png");
+    // Load sea background image (animated GIF)
+    seaImage = await loadImage("assets/sky_and_sea/noiseSea3.gif");
     // console.log("Sea image loaded:", seaImage.width, "x", seaImage.height);
 
     // Load cloud image
@@ -149,10 +149,28 @@ async function setup() {
         }
     });
 
+    // Apply round-btn class to all round buttons
+    select("#toggleDebugBtn").addClass("round-btn");
+    select("#autoSimBtn").addClass("round-btn");
+    select("#mouseModeRoad").addClass("round-btn");
+    select("#mouseModeCastle").addClass("round-btn");
+    select("#mouseModeFarmer").addClass("round-btn");
+    select("#mouseModeMerchant").addClass("round-btn");
+    select("#mouseModeDelete").addClass("round-btn");
+
     // Auto-simulation button
     select("#autoSimBtn").mousePressed(toggleAutoSimulation);
 
-    // Initialize mouse play UI
+    // Wire up mouse mode buttons
+    select("#mouseModeRoad").mousePressed(() => toggleMouseMode("road"));
+    select("#mouseModeCastle").mousePressed(() => toggleMouseMode("castle"));
+    select("#mouseModeFarmer").mousePressed(() => toggleMouseMode("farmer"));
+    select("#mouseModeMerchant").mousePressed(() =>
+        toggleMouseMode("merchant")
+    );
+    select("#mouseModeDelete").mousePressed(() => toggleMouseMode("delete"));
+
+    // Initialize mouse play UI (for backward compatibility with dynamic buttons in panel)
     initializeMousePlayUI();
 }
 
@@ -224,6 +242,7 @@ function draw() {
     const staticState = {
         showTraffic,
         showVertices,
+        showRoutes,
     };
     const staticStateChanged =
         JSON.stringify(staticState) !== JSON.stringify(lastStaticState);
@@ -233,6 +252,38 @@ function draw() {
     }
 
     background(0);
+
+    // Set up clipping region to hexagon boundary
+    if (tiles && vertices) {
+        drawingContext.save();
+        drawingContext.beginPath();
+
+        const vertexMap = new Map();
+        vertices.forEach((v) => vertexMap.set(v.index, v));
+
+        // Create clipping path from all tiles
+        tiles.forEach((tile) => {
+            const tileVertices = tile.vertexIndices.map((vIndex) =>
+                vertexMap.get(vIndex)
+            );
+            if (tileVertices.some((v) => !v)) return;
+
+            drawingContext.moveTo(tileVertices[0].x, tileVertices[0].y);
+            for (let i = 1; i < tileVertices.length; i++) {
+                drawingContext.lineTo(tileVertices[i].x, tileVertices[i].y);
+            }
+            drawingContext.closePath();
+        });
+
+        drawingContext.clip();
+    }
+
+    // Draw sea background image at 2x size
+    if (seaImage) {
+        const seaWidth = seaImage.width * 2;
+        const seaHeight = seaImage.height * 2;
+        image(seaImage, 0, 0, seaWidth, seaHeight);
+    }
 
     // Auto-simulation: spawn settlements every 5 frames
     if (autoSimulationActive) {
@@ -269,16 +320,6 @@ function draw() {
                 }
             }
         }
-    }
-
-    // Draw sea background image with hexagon mask
-    if (seaImage && seaMaskGraphics) {
-        push();
-        // Use the mask to clip sea image to hexagon shape
-        let maskedSea = seaImage.get();
-        maskedSea.mask(seaMaskGraphics);
-        image(maskedSea, 0, 0);
-        pop();
     }
 
     // Draw elevation layer (cached)
@@ -341,6 +382,7 @@ function draw() {
         staticContentBuffer.clear();
         if (showTraffic) drawTrafficHeatmapToBuffer(staticContentBuffer, scale);
         if (showVertices) drawVerticesToBuffer(staticContentBuffer, scale);
+        if (showRoutes) drawRoutesToBuffer(staticContentBuffer, scale);
         drawRouteEndpointsToBuffer(staticContentBuffer, scale);
         drawSteepSlopesToBuffer(staticContentBuffer);
         drawCentralAreaToBuffer(staticContentBuffer);
@@ -409,19 +451,31 @@ function draw() {
     if (showVertexInspector && selectedVertex) {
         drawVertexInspector();
     }
+
+    // Update and draw hovered vertex highlight for mouse play mode
+    if (mouseMode) {
+        updateHoveredVertex();
+        drawHoveredVertexHighlight();
+    }
+
+    // Restore clipping region
+    if (tiles && vertices) {
+        drawingContext.restore();
+    }
 }
 
 function createHexagonMask() {
     if (!seaMaskGraphics || !tiles || !vertices) return;
 
     seaMaskGraphics.clear();
-    seaMaskGraphics.fill(255);
-    seaMaskGraphics.noStroke();
+    seaMaskGraphics.background(0); // Black background (transparent areas)
+    seaMaskGraphics.fill(255); // White fill for land
+    seaMaskGraphics.noStroke(); // No stroke to avoid gaps
 
     const vertexMap = new Map();
     vertices.forEach((v) => vertexMap.set(v.index, v));
 
-    // Draw all tiles as white shapes to create mask
+    // Draw all tiles in one go without individual beginShape/endShape
     tiles.forEach((tile) => {
         const tileVertices = tile.vertexIndices.map((vIndex) =>
             vertexMap.get(vIndex)
@@ -1503,24 +1557,45 @@ function toggleAutoSimulation() {
     const btn = select("#autoSimBtn");
 
     if (autoSimulationActive) {
-        // Stop auto-simulation
         autoSimulationActive = false;
         autoSimFrameCounter = 0;
         btn.removeClass("active");
-        btn.html("▶️ Auto Sim");
-        updateProgress("Auto-simulation disabled");
     } else {
-        // Start auto-simulation
-        if (!topoData) {
-            alert("Please load map data first!");
-            return;
-        }
-
         autoSimulationActive = true;
         autoSimFrameCounter = 0;
         btn.addClass("active");
-        btn.html("⏸️ Auto Sim");
-        updateProgress("Auto-simulation enabled");
+    }
+}
+
+function toggleMouseMode(mode) {
+    // Toggle mouse mode - if same mode clicked, turn off
+    if (mouseMode === mode) {
+        setMouseMode(null);
+        // Remove active class from all mouse mode buttons
+        select("#mouseModeRoad").removeClass("active");
+        select("#mouseModeCastle").removeClass("active");
+        select("#mouseModeFarmer").removeClass("active");
+        select("#mouseModeMerchant").removeClass("active");
+        select("#mouseModeDelete").removeClass("active");
+    } else {
+        setMouseMode(mode);
+        // Update button visual states
+        select("#mouseModeRoad").removeClass("active");
+        select("#mouseModeCastle").removeClass("active");
+        select("#mouseModeFarmer").removeClass("active");
+        select("#mouseModeMerchant").removeClass("active");
+        select("#mouseModeDelete").removeClass("active");
+
+        // Add active class to clicked button
+        if (mode === "road") select("#mouseModeRoad").addClass("active");
+        else if (mode === "castle")
+            select("#mouseModeCastle").addClass("active");
+        else if (mode === "farmer")
+            select("#mouseModeFarmer").addClass("active");
+        else if (mode === "merchant")
+            select("#mouseModeMerchant").addClass("active");
+        else if (mode === "delete")
+            select("#mouseModeDelete").addClass("active");
     }
 }
 

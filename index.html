@@ -17,8 +17,15 @@
     </head>
     <body>
         <div id="canvas-container"></div>
+        <button id="toggleDebugBtn" title="Toggle Debug Panel">⚙️</button>
+        <button id="autoSimBtn" title="Toggle Auto Simulation">▶️</button>
+        <button id="mouseModeRoad" title="Place Road">🛤️</button>
+        <button id="mouseModeCastle" title="Place Castle">🏰</button>
+        <button id="mouseModeFarmer" title="Place Farmer">👨‍🌾</button>
+        <button id="mouseModeMerchant" title="Place Merchant">🏪</button>
+        <button id="mouseModeDelete" title="Delete">🗑️</button>
 
-        <div id="right-panel">
+        <div id="right-panel" class="hidden">
             <h1>🌍 World Simulator</h1>
 
             <div id="controls">
@@ -27,6 +34,7 @@
                     <button id="loadFileBtn">Load Topology File</button>
                     <input type="file" id="fileInput" accept=".json" />
                     <button id="resetSimBtn">Reset Simulation</button>
+                    <button id="toggleKinectBtn">Enable Kinect</button>
                 </div>
                 <div>
                     <strong>Pathfinding:</strong>

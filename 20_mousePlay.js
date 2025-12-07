@@ -112,6 +112,55 @@ function setMouseMode(mode) {
  * Handle mouse clicks on canvas for placing/deleting objects
  * Call this from mousePressed() in main sketch
  */
+/**
+ * Update hovered vertex based on mouse position
+ * Call this from draw() to continuously update hover state
+ */
+function updateHoveredVertex() {
+    if (!mouseMode || !vertices || vertices.length === 0) {
+        hoveredVertex = null;
+        return;
+    }
+
+    // Find closest vertex to mouse position
+    let closestVertex = null;
+    let minDistance = Infinity;
+    const maxDistance = 30; // Maximum hover distance in pixels
+
+    vertices.forEach((v) => {
+        const dx = v.x - mouseX;
+        const dy = v.y - mouseY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDistance && dist < maxDistance) {
+            minDistance = dist;
+            closestVertex = v;
+        }
+    });
+
+    hoveredVertex = closestVertex;
+}
+
+/**
+ * Draw highlight around hovered vertex's polygon
+ * Draws a quad connecting the centers of surrounding tiles
+ */
+function drawHoveredVertexHighlight() {
+    if (!hoveredVertex || !hoveredVertex.surroundingTiles) return;
+    if (hoveredVertex.surroundingTiles.length === 0) return;
+
+    // Draw quad through tile centers
+    push();
+    noFill();
+    stroke(255, 255, 150, 200); // Light yellow highlight
+    strokeWeight(3);
+    beginShape();
+    hoveredVertex.surroundingTiles.forEach((tile) => {
+        vertex(tile.centerX, tile.centerY);
+    });
+    endShape(CLOSE);
+    pop();
+}
+
 function handleMousePlayClick() {
     if (!mouseMode || !vertices || vertices.length === 0) {
         return false; // Not handled
@@ -167,6 +216,7 @@ function handleMousePlayClick() {
  */
 function placeRoad(vertex) {
     if (!vertex) return;
+    if (vertex.water) return; // Silently ignore water vertices
 
     // Roads aren't settlements, they're part of routes
     // For now, just mark vertex as occupied by a "road" placeholder
