@@ -8,9 +8,8 @@ let professions = ["Lord", "Farmer", "Merchant"];
 let farmerRange = 50; // in canvas pixels
 let waterAccessDist = 200; // in canvas pixels
 let FARM_ELEVATION_THRESHOLD = 150; // Elevation above which farming is not viable
-let farmerValueRadius = 200; // Radius for farmer value calculation
-let FARMER_MOVE_COST_RANGE = 100; // Movement cost budget for farmer value calculation
-let VINCINITY_MOVE_COST_RANGE = 40; // Movement cost budget for vicinity calculation
+let MIDDLE_RANGE = 350; // Movement cost budget for farmer value calculation
+let SHORT_RANGE = 100; // Movement cost budget for vicinity calculation
 let vertexQuadtree = null; // Quadtree for spatial queries
 // Note: tradeDestination1 and tradeDestination2 are defined in sketch.js
 
@@ -360,8 +359,8 @@ function createLord() {
 
     // Find vertex with highest combined value (defense + 0.25 * farmerValue)
     centralHabitable.sort((a, b) => {
-        const scoreA = a.defense + 0.5 * a.farmerValue;
-        const scoreB = b.defense + 0.5 * b.farmerValue;
+        const scoreA = a.defense + 0.3 * a.farmerValue;
+        const scoreB = b.defense + 0.3 * b.farmerValue;
         return scoreB - scoreA;
     });
     const castleVertex = centralHabitable[0];
@@ -734,15 +733,12 @@ function calculateFarmerValues() {
         // Calculate vicinity neighbors (smaller range)
         const vincinityVertices = findVerticesWithinMoveCost(
             vertex,
-            VINCINITY_MOVE_COST_RANGE
+            SHORT_RANGE
         );
         vertex.vincinityNeighbors = vincinityVertices;
 
         // Use movement-cost based flood fill to find nearby vertices
-        const nearbyVertices = findVerticesWithinMoveCost(
-            vertex,
-            FARMER_MOVE_COST_RANGE
-        );
+        const nearbyVertices = findVerticesWithinMoveCost(vertex, MIDDLE_RANGE);
 
         // Store flooded neighbors for visualization
         vertex.floodedNeighbors = nearbyVertices;
