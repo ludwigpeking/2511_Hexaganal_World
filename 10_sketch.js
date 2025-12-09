@@ -1,3 +1,6 @@
+//TODOs:
+// 1) moveCost reduction by traffic logic
+// 2) slope adjusted
 // Global variables
 let topoData = null;
 let vertices = [];
@@ -114,27 +117,10 @@ async function setup() {
     select("#clearRoutesBtn").mousePressed(clearRoutes);
     select("#resetSimBtn").mousePressed(resetSimulation);
 
+    // Setup left panel layer buttons
+    setupLayerButtons();
+
     select("#autoSimulate").changed(toggleAutoSimulation);
-    select("#showElevation").changed(() => redraw());
-    select("#showPresentation").changed(() => {
-        invalidateBuffers("presentation");
-        redraw();
-    });
-    select("#showVertices").changed(() => redraw());
-    select("#showTraffic").changed(() => redraw());
-    select("#showBuildings").changed(() => redraw());
-    select("#showRoutes").changed(() => redraw());
-    select("#showDefense").changed(() => redraw());
-    select("#showSecurity").changed(() => redraw());
-    select("#showFarmValue").changed(() => redraw());
-    select("#showFarmerValue").changed(() => redraw());
-    select("#showMerchantValue").changed(() => redraw());
-    select("#showSteepness").changed(() => redraw());
-    select("#showSlopeDirection").changed(() => redraw());
-    select("#showHabitable").changed(() => redraw());
-    select("#showOccupied").changed(() => redraw());
-    select("#showTrafficCount").changed(() => redraw());
-    select("#showVertexInspector").changed(() => redraw());
     select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
     select("#toggleKinectBtn").mousePressed(toggleKinect);
@@ -174,6 +160,131 @@ async function setup() {
     initializeMousePlayUI();
 }
 
+// Layer button state management
+let activeExclusiveLayer = null;
+let layerStates = {
+    vertexInspector: false,
+    defense: false,
+    security: false,
+    farmValue: false,
+    farmerValue: false,
+    trafficWeight: false,
+    merchantValue: false,
+    steepness: false,
+    slopeDirection: false,
+    trafficCount: false,
+    habitable: false,
+    occupied: false,
+    routes: false,
+    presentation: true,
+    elevation: true,
+    water: true,
+};
+
+function setupLayerButtons() {
+    // Vertex Inspector (independent, always on top)
+    select("#layerVertexInspector").mousePressed(() => {
+        layerStates.vertexInspector = !layerStates.vertexInspector;
+        updateLayerButtonState(
+            "layerVertexInspector",
+            layerStates.vertexInspector
+        );
+        redraw();
+    });
+
+    // Mutually exclusive layers
+    const exclusiveLayers = [
+        { id: "layerDefense", key: "defense" },
+        { id: "layerSecurity", key: "security" },
+        { id: "layerFarmValue", key: "farmValue" },
+        { id: "layerFarmerValue", key: "farmerValue" },
+        { id: "layerTrafficWeight", key: "trafficWeight" },
+        { id: "layerMerchantValue", key: "merchantValue" },
+        { id: "layerSteepness", key: "steepness" },
+        { id: "layerSlopeDirection", key: "slopeDirection" },
+        { id: "layerTrafficCount", key: "trafficCount" },
+        { id: "layerHabitable", key: "habitable" },
+        { id: "layerOccupied", key: "occupied" },
+        { id: "layerRoutes", key: "routes" },
+    ];
+
+    exclusiveLayers.forEach((layer) => {
+        select(`#${layer.id}`).mousePressed(() => {
+            toggleExclusiveLayer(layer.id, layer.key);
+        });
+    });
+
+    // Independent layers
+    select("#layerPresentation").mousePressed(() => {
+        layerStates.presentation = !layerStates.presentation;
+        updateLayerButtonState("layerPresentation", layerStates.presentation);
+        invalidateBuffers("presentation");
+        redraw();
+    });
+
+    select("#layerElevation").mousePressed(() => {
+        layerStates.elevation = !layerStates.elevation;
+        updateLayerButtonState("layerElevation", layerStates.elevation);
+        redraw();
+    });
+
+    select("#layerWater").mousePressed(() => {
+        layerStates.water = !layerStates.water;
+        updateLayerButtonState("layerWater", layerStates.water);
+        redraw();
+    });
+}
+
+function toggleExclusiveLayer(buttonId, layerKey) {
+    // If clicking the same layer, turn it off
+    if (activeExclusiveLayer === layerKey) {
+        layerStates[layerKey] = false;
+        activeExclusiveLayer = null;
+        updateLayerButtonState(buttonId, false);
+    } else {
+        // Turn off previous layer
+        if (activeExclusiveLayer) {
+            layerStates[activeExclusiveLayer] = false;
+            const prevButtonId = getButtonIdForLayer(activeExclusiveLayer);
+            if (prevButtonId) updateLayerButtonState(prevButtonId, false);
+        }
+        // Turn on new layer
+        layerStates[layerKey] = true;
+        activeExclusiveLayer = layerKey;
+        updateLayerButtonState(buttonId, true);
+    }
+    redraw();
+}
+
+function getButtonIdForLayer(layerKey) {
+    const mapping = {
+        defense: "layerDefense",
+        security: "layerSecurity",
+        farmValue: "layerFarmValue",
+        farmerValue: "layerFarmerValue",
+        trafficWeight: "layerTrafficWeight",
+        merchantValue: "layerMerchantValue",
+        steepness: "layerSteepness",
+        slopeDirection: "layerSlopeDirection",
+        trafficCount: "layerTrafficCount",
+        habitable: "layerHabitable",
+        occupied: "layerOccupied",
+        routes: "layerRoutes",
+    };
+    return mapping[layerKey];
+}
+
+function updateLayerButtonState(buttonId, isActive) {
+    const btn = select(`#${buttonId}`);
+    if (btn) {
+        if (isActive) {
+            btn.addClass("active");
+        } else {
+            btn.removeClass("active");
+        }
+    }
+}
+
 function draw() {
     if (!topoData) {
         background(0);
@@ -200,23 +311,30 @@ function draw() {
     }
 
     const scale = topoData.mapping.hexToCanvasScale;
-    const showElevation = select("#showElevation").checked();
-    const showPresentation = select("#showPresentation").checked();
-    const showVertices = select("#showVertices").checked();
-    const showTraffic = select("#showTraffic").checked();
-    const showBuildings = select("#showBuildings").checked();
-    const showRoutes = select("#showRoutes").checked();
-    const showDefense = select("#showDefense").checked();
-    const showSecurity = select("#showSecurity").checked();
-    const showFarmValue = select("#showFarmValue").checked();
-    const showFarmerValue = select("#showFarmerValue").checked();
-    const showMerchantValue = select("#showMerchantValue").checked();
-    const showSteepness = select("#showSteepness").checked();
-    const showSlopeDirection = select("#showSlopeDirection").checked();
-    const showHabitable = select("#showHabitable").checked();
-    const showOccupied = select("#showOccupied").checked();
-    const showTrafficCount = select("#showTrafficCount").checked();
-    const showVertexInspector = select("#showVertexInspector").checked();
+
+    // Use layer states instead of checkboxes
+    const showElevation = layerStates.elevation;
+    const showPresentation = layerStates.presentation;
+    const showWater = layerStates.water;
+    const showVertexInspector = layerStates.vertexInspector;
+    const showDefense = layerStates.defense;
+    const showSecurity = layerStates.security;
+    const showFarmValue = layerStates.farmValue;
+    const showFarmerValue = layerStates.farmerValue;
+    const showTraffic = layerStates.trafficWeight;
+    const showMerchantValue = layerStates.merchantValue;
+    const showSteepness = layerStates.steepness;
+    const showSlopeDirection = layerStates.slopeDirection;
+    const showTrafficCount = layerStates.trafficCount;
+    const showHabitable = layerStates.habitable;
+    const showOccupied = layerStates.occupied;
+    const showRoutes = layerStates.routes;
+
+    // These remain for backward compatibility with debug panel
+    const showVertices = false; // Removed from UI
+    const showBuildings = select("#showBuildings")
+        ? select("#showBuildings").checked()
+        : false;
 
     // Check if debug layers state changed
     const debugState = {
@@ -278,8 +396,8 @@ function draw() {
         drawingContext.clip();
     }
 
-    // Draw sea background image at 2x size
-    if (seaImage) {
+    // Draw sea background image at 2x size (only if water layer is enabled)
+    if (seaImage && showWater) {
         const seaWidth = seaImage.width * 2;
         const seaHeight = seaImage.height * 2;
         image(seaImage, 0, 0, seaWidth, seaHeight);
@@ -340,7 +458,17 @@ function draw() {
     }
     // image(tilesBuffer, 0, 0);
 
-    // Draw debug layers (cached when state doesn't change)
+    // Draw presentation layer with textured quads
+    if (showPresentation && patternAtlas) {
+        image(presentationBuffer, 0, 0);
+    }
+
+    // Draw dynamic content (buildings)
+    if (showBuildings) {
+        drawSettlements();
+    }
+
+    // Draw debug layers ON TOP of graphics layers
     if (needsRedrawDebugLayers) {
         debugLayersBuffer.clear();
         if (showDefense) drawDebugLayerToBuffer(debugLayersBuffer, "defense");
@@ -389,16 +517,6 @@ function draw() {
         needsRedrawStatic = false;
     }
     image(staticContentBuffer, 0, 0);
-
-    // Draw dynamic content (always redrawn)
-    if (showBuildings) {
-        drawSettlements();
-    }
-
-    // Draw presentation layer with textured quads on top of everything
-    if (showPresentation && patternAtlas) {
-        image(presentationBuffer, 0, 0);
-    }
 
     // Draw animated cloud layer on top
     if (cloudImage) {
@@ -517,8 +635,7 @@ function mouseClicked() {
         return; // Mouse play handled it
     }
 
-    const showVertexInspector = select("#showVertexInspector").checked();
-    if (!showVertexInspector) return;
+    if (!layerStates.vertexInspector) return;
 
     // Use quadtree for optimized search if available
     const searchRadius = 30; // pixels
@@ -1470,10 +1587,10 @@ function drawVertexInspector() {
     }
 
     // Draw panel background
-    // fill(255, 255, 255, 240);
-    // stroke(0);
-    // strokeWeight(2);
-    // rect(finalPanelX, finalPanelY, panelWidth, panelHeight, 5);
+    fill(255, 255, 255, 153); // 60% opacity (153/255 = 0.6)
+    stroke(0);
+    strokeWeight(2);
+    rect(finalPanelX, finalPanelY, panelWidth, panelHeight, 5);
 
     // Draw property text
     fill(0);

@@ -17,6 +17,8 @@
     </head>
     <body>
         <div id="canvas-container"></div>
+
+        <!-- Right side control buttons -->
         <button id="toggleDebugBtn" title="Toggle Debug Panel">⚙️</button>
         <button id="autoSimBtn" title="Toggle Auto Simulation">▶️</button>
         <button id="mouseModeRoad" title="Place Road">🛤️</button>
@@ -24,6 +26,127 @@
         <button id="mouseModeFarmer" title="Place Farmer">👨‍🌾</button>
         <button id="mouseModeMerchant" title="Place Merchant">🏪</button>
         <button id="mouseModeDelete" title="Delete">🗑️</button>
+
+        <!-- Left side layer buttons -->
+        <div id="left-panel">
+            <!-- Vertex Inspector (always on top) -->
+            <button
+                id="layerVertexInspector"
+                class="layer-btn"
+                title="Vertex Inspector"
+            >
+                🔍
+            </button>
+
+            <div class="layer-separator"></div>
+
+            <!-- Mutually exclusive debug layers -->
+            <button
+                id="layerDefense"
+                class="layer-btn exclusive"
+                title="Defense Value"
+            >
+                🏯
+            </button>
+            <button
+                id="layerSecurity"
+                class="layer-btn exclusive"
+                title="Security Value"
+            >
+                👁️
+            </button>
+            <button
+                id="layerFarmValue"
+                class="layer-btn exclusive"
+                title="Farm Value"
+            >
+                🌾
+            </button>
+            <button
+                id="layerFarmerValue"
+                class="layer-btn exclusive"
+                title="Farmer Value"
+            >
+                🏡
+            </button>
+            <button
+                id="layerTrafficWeight"
+                class="layer-btn exclusive"
+                title="Pedestrian Value"
+            >
+                👣
+            </button>
+            <button
+                id="layerMerchantValue"
+                class="layer-btn exclusive"
+                title="Merchant Value"
+            >
+                💰
+            </button>
+            <button
+                id="layerSteepness"
+                class="layer-btn exclusive"
+                title="Steepness"
+            >
+                ⛰️
+            </button>
+            <button
+                id="layerSlopeDirection"
+                class="layer-btn exclusive"
+                title="Slope Direction"
+            >
+                💧
+            </button>
+            <button
+                id="layerTrafficCount"
+                class="layer-btn exclusive"
+                title="Traffic Count"
+            >
+                🔢
+            </button>
+            <button
+                id="layerHabitable"
+                class="layer-btn exclusive"
+                title="Habitable"
+            >
+                🟢
+            </button>
+            <button
+                id="layerOccupied"
+                class="layer-btn exclusive"
+                title="Occupied"
+            >
+                🔴
+            </button>
+            <button id="layerRoutes" class="layer-btn exclusive" title="Routes">
+                ⛗
+            </button>
+
+            <div class="layer-separator"></div>
+
+            <!-- Independent layers -->
+            <button
+                id="layerPresentation"
+                class="layer-btn independent active"
+                title="City"
+            >
+                🏙️
+            </button>
+            <button
+                id="layerElevation"
+                class="layer-btn independent active"
+                title="Topography"
+            >
+                🗺️
+            </button>
+            <button
+                id="layerWater"
+                class="layer-btn independent active"
+                title="Water"
+            >
+                🌊
+            </button>
+        </div>
 
         <div id="right-panel" class="hidden">
             <h1>🌍 World Simulator</h1>
