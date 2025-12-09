@@ -14,6 +14,7 @@ let simulationStep = 0;
 let autoSimInterval = null;
 let canvasScale = 1;
 let waterLevel = 10;
+let UnhabitableLevel = 120; // Elevation above which vertices cannot be settled
 let modeChangeCost = 50;
 let waterTransportFactor = 0.01;
 let steepSlopes = []; // Array of {from: vertex, to: vertex} for debug visualization
@@ -55,6 +56,35 @@ let isFirstAutoSpawn = true; // Track if first settlement has been spawned
 let autoSimulationActive = false; // Track if auto-simulation is running
 let autoSimFrameCounter = 0; // Count frames for spawning
 const AUTO_SIM_SPAWN_INTERVAL = 20; // Spawn every 20 frames
+
+// Dual-click button tracking
+let clickTimers = {};
+const DOUBLE_CLICK_DELAY = 300; // milliseconds
+
+/**
+ * Setup a button with both single-click (toggle mode) and double-click (execute action) handlers
+ */
+function setupDualClickButton(buttonId, mode, doubleClickAction) {
+    const button = select(buttonId);
+    if (!button) return;
+
+    button.elt.addEventListener("click", (e) => {
+        const buttonKey = buttonId;
+
+        if (clickTimers[buttonKey]) {
+            // This is a double-click - clear timer and execute action
+            clearTimeout(clickTimers[buttonKey]);
+            delete clickTimers[buttonKey];
+            doubleClickAction();
+        } else {
+            // This is a single click - wait to see if double-click follows
+            clickTimers[buttonKey] = setTimeout(() => {
+                delete clickTimers[buttonKey];
+                toggleMouseMode(mode);
+            }, DOUBLE_CLICK_DELAY);
+        }
+    });
+}
 
 // Graphics buffers for performance
 let elevationBuffer = null;
@@ -111,9 +141,6 @@ async function setup() {
 
     select("#createRouteBtn").mousePressed(createRandomRoute);
     select("#randomTravelBtn").mousePressed(createRandomTravel);
-    select("#addLordBtn").mousePressed(addLordSettlement);
-    select("#addFarmerBtn").mousePressed(addFarmerSettlement);
-    select("#addMerchantBtn").mousePressed(addMerchantSettlement);
     select("#clearRoutesBtn").mousePressed(clearRoutes);
     select("#resetSimBtn").mousePressed(resetSimulation);
 
@@ -123,6 +150,7 @@ async function setup() {
     select("#autoSimulate").changed(toggleAutoSimulation);
     select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
     select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
+    select("#setUnhabitableLevelBtn").mousePressed(updateUnhabitableLevel);
     select("#toggleKinectBtn").mousePressed(toggleKinect);
 
     // Toggle debug panel button
@@ -147,13 +175,22 @@ async function setup() {
     // Auto-simulation button
     select("#autoSimBtn").mousePressed(toggleAutoSimulation);
 
-    // Wire up mouse mode buttons
+    // Wire up mouse mode buttons (single click for toggle, double click for value-based placement)
     select("#mouseModeRoad").mousePressed(() => toggleMouseMode("road"));
-    select("#mouseModeCastle").mousePressed(() => toggleMouseMode("castle"));
-    select("#mouseModeFarmer").mousePressed(() => toggleMouseMode("farmer"));
-    select("#mouseModeMerchant").mousePressed(() =>
-        toggleMouseMode("merchant")
+
+    // Castle button: single click = toggle mode, double click = add by value
+    setupDualClickButton("#mouseModeCastle", "castle", addLordSettlement);
+
+    // Farmer button: single click = toggle mode, double click = add by value
+    setupDualClickButton("#mouseModeFarmer", "farmer", addFarmerSettlement);
+
+    // Merchant button: single click = toggle mode, double click = add by value
+    setupDualClickButton(
+        "#mouseModeMerchant",
+        "merchant",
+        addMerchantSettlement
     );
+
     select("#mouseModeDelete").mousePressed(() => toggleMouseMode("delete"));
 
     // Initialize mouse play UI (for backward compatibility with dynamic buttons in panel)
@@ -1129,6 +1166,24 @@ function updateWaterLevel() {
     }
 } // a problem, this function does not update the habitable array, farm values and farmer values etc.
 
+function updateUnhabitableLevel() {
+    UnhabitableLevel = parseFloat(select("#unhabitableLevel").value());
+    if (topoData && vertices) {
+        vertices.forEach((vertex) => {
+            // Update habitable status based on elevation and water
+            // High elevation vertices are not habitable but still allow pathfinding
+            if (vertex.elevation > UnhabitableLevel) {
+                vertex.habitable = false;
+            } else {
+                vertex.habitable = !vertex.water;
+            }
+        });
+        updateProgress(`Uninhabitable level set to ${UnhabitableLevel}m`);
+        invalidateBuffers("debug");
+        redraw();
+    }
+}
+
 function processData() {
     updateProgress("Processing topology data...");
 
@@ -1220,6 +1275,13 @@ function processData() {
     // Set water status for all vertices
     vertices.forEach((vertex) => {
         vertex.setWaterStatus(waterLevel);
+    });
+
+    // Mark high elevation vertices as not habitable
+    vertices.forEach((vertex) => {
+        if (vertex.elevation > UnhabitableLevel) {
+            vertex.habitable = false;
+        }
     });
 
     // Store surrounding tile centers for each vertex

@@ -178,7 +178,12 @@ function initializeSimulationValues() {
         }
 
         vertex.buffer = false;
-        vertex.habitable = !vertex.water;
+        // Check both water and elevation for habitability
+        if (vertex.elevation > UnhabitableLevel) {
+            vertex.habitable = false;
+        } else {
+            vertex.habitable = !vertex.water;
+        }
     });
 
     // Calculate steepness for each vertex

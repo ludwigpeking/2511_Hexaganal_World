@@ -210,7 +210,7 @@ class Vertex {
 
             if (!fromWater && !toWater) {
                 // Land to land
-                moveCost = distance * Math.pow(1 + Math.abs(slope), 8);
+                moveCost = distance * Math.pow(1 + 10 * Math.abs(slope), 4);
             } else if (fromWater !== toWater) {
                 // Land to water or water to land
                 moveCost = distance * (1 + modeChangeCost);

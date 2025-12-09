@@ -300,6 +300,24 @@ function placeMerchant(vertex) {
 function deleteOwner(vertex) {
     if (!vertex) return;
 
+    // Check if this is a castle annex (clicked on annex itself, not the lord)
+    if (vertex.castleAnnex && !vertex.occupiedBy) {
+        // Just clear this individual annex
+        vertex.occupied = false;
+        vertex.castleAnnex = null;
+        vertex.habitable = !vertex.water;
+        updateProgress(`Deleted castle annex from vertex ${vertex.index}`);
+        return;
+    }
+
+    // Check if this is a garden (clicked on garden itself, not the farmer)
+    if (vertex.garden && !vertex.occupiedBy) {
+        // Just clear this individual garden
+        vertex.garden = null;
+        updateProgress(`Deleted garden from vertex ${vertex.index}`);
+        return;
+    }
+
     // Find settlement at this vertex
     const settlementIndex = settlements.findIndex(
         (s) => s.vertex.index === vertex.index
@@ -310,12 +328,38 @@ function deleteOwner(vertex) {
 
         // Remove annexes if it's a Lord
         if (settlement.profession === "Lord") {
+            // Clear all castle annexes
+            if (
+                vertex.vincinityNeighbors &&
+                vertex.vincinityNeighbors.length > 0
+            ) {
+                vertex.vincinityNeighbors.forEach((annexVertex) => {
+                    annexVertex.occupied = false;
+                    annexVertex.castleAnnex = null;
+                    annexVertex.habitable = !annexVertex.water;
+                });
+            }
+
             // Remove from castleVertices
             const castleIndex = castleVertices.findIndex(
                 (v) => v.index === vertex.index
             );
             if (castleIndex !== -1) {
                 castleVertices.splice(castleIndex, 1);
+            }
+        }
+
+        // Remove gardens if it's a Farmer
+        if (settlement.profession === "Farmer") {
+            if (
+                vertex.vincinityNeighbors &&
+                vertex.vincinityNeighbors.length > 0
+            ) {
+                vertex.vincinityNeighbors.forEach((gardenVertex) => {
+                    if (gardenVertex.garden === settlement) {
+                        gardenVertex.garden = null;
+                    }
+                });
             }
         }
 
