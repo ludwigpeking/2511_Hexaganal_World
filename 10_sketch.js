@@ -167,8 +167,8 @@ async function setup() {
 
     select("#mouseModeDelete").mousePressed(() => toggleMouseMode("delete"));
 
-    // Initialize mouse play UI (for backward compatibility with dynamic buttons in panel)
-    initializeMousePlayUI();
+    // Mouse play UI removed - using round buttons instead
+    // initializeMousePlayUI();
 }
 
 function draw() {
@@ -186,14 +186,25 @@ function draw() {
         presentationBuffer = createGraphics(width, height);
         seaMaskGraphics = createGraphics(width, height);
 
-        // Draw initial presentation layer
-        drawPresentationLayerToBuffer(
-            presentationBuffer,
-            topoData.mapping.hexToCanvasScale
-        );
-
         // Create hexagon mask
         createHexagonMask();
+
+        // Defer presentation layer drawing to next frame to ensure everything is ready
+        setTimeout(() => {
+            if (
+                width > 0 &&
+                height > 0 &&
+                patternAtlas &&
+                patternAtlas.width > 0 &&
+                topoData
+            ) {
+                drawPresentationLayerToBuffer(
+                    presentationBuffer,
+                    topoData.mapping.hexToCanvasScale
+                );
+                redraw();
+            }
+        }, 0);
     }
 
     const scale = topoData.mapping.hexToCanvasScale;
@@ -510,9 +521,15 @@ function invalidateBuffers(which = "all") {
 function updatePresentationLayer() {
     if (!presentationBuffer || !patternAtlas) return;
 
+    // Check if canvas and atlas have valid dimensions
+    if (!topoData || width <= 0 || height <= 0 || patternAtlas.width <= 0) {
+        console.warn("Cannot update presentation layer: invalid dimensions");
+        return;
+    }
+
     // Clear and redraw presentation layer immediately
     presentationBuffer.clear();
-    const scale = topoData ? topoData.mapping.hexToCanvasScale : 1;
+    const scale = topoData.mapping.hexToCanvasScale;
     drawPresentationLayerToBuffer(presentationBuffer, scale);
 }
 
@@ -848,17 +865,29 @@ async function processKinectDepthToTopo() {
 
     // Clear all simulation state
     settlements = [];
+    settlementNr = 0; // Reset settlement counter
+    castleVertices = [];
+    habitable = [];
     routes = [];
     travelers = [];
     tradeDestination1 = null;
     tradeDestination2 = null;
     simulationStep = 0;
+    isFirstAutoSpawn = true; // Reset first spawn flag
+    autoSimulationActive = false; // Stop auto-simulation
+    autoSimFrameCounter = 0; // Reset frame counter
 
     // Stop auto simulation if running
     if (autoSimInterval) {
         clearInterval(autoSimInterval);
         autoSimInterval = null;
         select("#autoSimulate").elt.checked = false;
+    }
+
+    // Update auto-sim button state
+    const autoSimBtn = select("#autoSimBtn");
+    if (autoSimBtn) {
+        autoSimBtn.removeClass("active");
     }
 
     // Reprocess data
@@ -1722,8 +1751,13 @@ function drawTilesWithElevationToBuffer(buffer, scale) {
 }
 
 function drawPresentationLayerToBuffer(buffer, scale) {
-    if (!patternAtlas) {
-        // console.warn("Pattern atlas not loaded");
+    if (!patternAtlas || patternAtlas.width <= 0 || patternAtlas.height <= 0) {
+        console.warn("Pattern atlas not ready");
+        return;
+    }
+
+    if (!vertices || vertices.length === 0) {
+        console.warn("Vertices not ready");
         return;
     }
 
@@ -1824,6 +1858,11 @@ function drawTrafficHeatmapToBuffer(buffer, scale) {
 
     if (maxTraffic === 0) return;
 
+    // Use logarithmic scale for better contrast
+    const maxLog = Math.log(maxTraffic + 1);
+    const from = color(255, 255, 0); // Yellow for low traffic
+    const to = color(255, 0, 0); // Red for high traffic
+
     topoData.vertices.forEach((vtx) => {
         if (
             vtx.traffic > 0 &&
@@ -1831,7 +1870,13 @@ function drawTrafficHeatmapToBuffer(buffer, scale) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(255, 0, 0, 128); // 50% opacity
+
+            // Logarithmic color mapping for better contrast
+            const logValue = Math.log(vtx.traffic + 1);
+            const t = logValue / maxLog;
+            const fillColor = lerpColor(from, to, t);
+            fillColor.setAlpha(128); // 50% opacity
+            buffer.fill(fillColor);
 
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
@@ -1845,6 +1890,9 @@ function drawTrafficHeatmapToBuffer(buffer, scale) {
             buffer.text(round(vtx.traffic * 10) / 10, vtx.x, vtx.y);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Traffic");
 }
 
 function drawRoutesToBuffer(buffer, scale) {
@@ -1912,6 +1960,18 @@ function drawCentralAreaToBuffer(buffer) {
     // Central area only shown when defense layer is active - skip in buffer
 }
 
+// Helper function to draw layer name on buffer
+function drawLayerNameToBuffer(buffer, layerName) {
+    buffer.push();
+    buffer.textFont("Georgia"); // Serif font with Roman feel
+    buffer.fill(255); // White color
+    buffer.noStroke();
+    buffer.textAlign(CENTER, CENTER);
+    buffer.textSize(48);
+    buffer.text(layerName, width / 2, height / 2);
+    buffer.pop();
+}
+
 // Helper functions to draw debug layers to buffer
 function drawDefenseValueToBuffer(buffer) {
     if (!vertices) return;
@@ -1943,6 +2003,9 @@ function drawDefenseValueToBuffer(buffer) {
             buffer.text(round(v.defense), v.x, v.y);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Defense");
 }
 
 function drawSecurityValueToBuffer(buffer) {
@@ -1952,6 +2015,11 @@ function drawSecurityValueToBuffer(buffer) {
         if (v.security > maxSecurity) maxSecurity = v.security;
     });
     if (maxSecurity === 0) return;
+
+    // Linear color gradient for security
+    const from = color(255, 255, 200); // Light yellow for low security
+    const to = color(255, 100, 0); // Orange for high security
+
     buffer.colorMode(RGB);
     vertices.forEach((vtx) => {
         if (
@@ -1960,7 +2028,13 @@ function drawSecurityValueToBuffer(buffer) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(255, 200, 0, 128); // 50% opacity
+
+            // Linear color lerp
+            const t = vtx.security / maxSecurity;
+            const fillColor = lerpColor(from, to, t);
+            fillColor.setAlpha(128); // 50% opacity
+            buffer.fill(fillColor);
+
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -1972,6 +2046,9 @@ function drawSecurityValueToBuffer(buffer) {
             buffer.text(round(vtx.security), vtx.x, vtx.y);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Security");
 }
 
 function drawFarmValueLayerToBuffer(buffer) {
@@ -2005,6 +2082,9 @@ function drawFarmValueLayerToBuffer(buffer) {
             buffer.text(round(vtx.farmValue * 10) / 10, vtx.x, vtx.y);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Farm Value");
 }
 
 function drawFarmerValueLayerToBuffer(buffer) {
@@ -2042,6 +2122,9 @@ function drawFarmerValueLayerToBuffer(buffer) {
         }
     });
     buffer.colorMode(RGB);
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Farmer Value");
 }
 
 function drawMerchantValueLayerToBuffer(buffer) {
@@ -2073,6 +2156,10 @@ function drawMerchantValueLayerToBuffer(buffer) {
         // console.log("  Returning early: maxMerchantValue is 0");
         return;
     }
+
+    // Use logarithmic scale for better contrast
+    const maxLog = Math.log(maxMerchantValue + 1);
+
     buffer.colorMode(HSB, 360, 100, 100, 1); // HSB with alpha 0-1
     vertices.forEach((vtx) => {
         if (
@@ -2081,8 +2168,13 @@ function drawMerchantValueLayerToBuffer(buffer) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            let hue = map(vtx.merchantValue, 0, maxMerchantValue, 200, 300);
+
+            // Logarithmic hue mapping (200 to 300 range: cyan to magenta)
+            const logValue = Math.log(vtx.merchantValue + 1);
+            const t = logValue / maxLog;
+            let hue = map(t, 0, 1, 200, 300);
             buffer.fill(hue % 360, 100, 100, 0.5); // 50% opacity
+
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2095,6 +2187,9 @@ function drawMerchantValueLayerToBuffer(buffer) {
         }
     });
     buffer.colorMode(RGB);
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Merchant Value");
 }
 
 function drawSteepnessLayerToBuffer(buffer) {
@@ -2133,6 +2228,9 @@ function drawSteepnessLayerToBuffer(buffer) {
         }
     });
     buffer.colorMode(RGB);
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Steepness");
 }
 
 function drawSlopeDirectionLayerToBuffer(buffer) {
@@ -2170,6 +2268,9 @@ function drawSlopeDirectionLayerToBuffer(buffer) {
             );
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Slope Direction");
 }
 
 function drawHabitableLayerToBuffer(buffer) {
@@ -2190,6 +2291,9 @@ function drawHabitableLayerToBuffer(buffer) {
             buffer.endShape(CLOSE);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Habitable");
 }
 
 function drawOccupiedLayerToBuffer(buffer) {
@@ -2210,6 +2314,9 @@ function drawOccupiedLayerToBuffer(buffer) {
             buffer.endShape(CLOSE);
         }
     });
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Occupied");
 }
 
 function drawTrafficCountLayerToBuffer(buffer) {
@@ -2260,4 +2367,7 @@ function drawTrafficCountLayerToBuffer(buffer) {
         }
     });
     buffer.colorMode(RGB);
+
+    // Draw layer name
+    drawLayerNameToBuffer(buffer, "Traffic Count");
 }
