@@ -1,7 +1,22 @@
 /**
- * Mouse Interaction Module
- * Provides mouse-based placement and deletion of game objects
+ * UI Module
+ * Handles all user interface interactions including:
+ * - Mouse-based placement and deletion of game objects
+ * - Layer button controls
+ * - Round button dual-click functionality
+ * - Tooltip management
  */
+
+// Button tooltips/tips configuration
+const BUTTON_TIPS = {
+    toggleDebug: "Debug Panel",
+    autoSim: "Auto Simulation",
+    road: "Road Mode",
+    castle: "Castle Mode | Add a Castle",
+    farmer: "Farmer Mode | Add a Farmer",
+    merchant: "Merchant Mode | Add a Merchant",
+    delete: "Delete Mode",
+};
 
 // Mouse interaction state
 let mouseMode = null; // 'road', 'castle', 'farmer', 'merchant', 'delete', or null
@@ -400,4 +415,311 @@ function getMouseMode() {
  */
 function isMousePlayActive() {
     return mouseMode !== null;
+}
+
+// ============================================
+// Layer Button Management
+// ============================================
+
+// Layer button state management
+let activeExclusiveLayer = null;
+let layerStates = {
+    vertexInspector: false,
+    defense: false,
+    security: false,
+    farmValue: false,
+    farmerValue: false,
+    trafficWeight: false,
+    merchantValue: false,
+    steepness: false,
+    slopeDirection: false,
+    trafficCount: false,
+    habitable: false,
+    occupied: false,
+    routes: false,
+    presentation: true,
+    elevation: true,
+    water: true,
+};
+
+// Demonstration mode state
+let demonstrationMode = false;
+let demoFrameCounter = 0;
+let demoCurrentLayerIndex = 0;
+let demoShowingLayer = false; // true = showing layer, false = off interval
+const DEMO_INTERVAL = 120; // frames for each on/off cycle
+
+// Exclusive layers array for demonstration mode
+const EXCLUSIVE_LAYERS = [
+    { id: "layerDefense", key: "defense" },
+    { id: "layerSecurity", key: "security" },
+    { id: "layerFarmValue", key: "farmValue" },
+    { id: "layerFarmerValue", key: "farmerValue" },
+    { id: "layerTrafficWeight", key: "trafficWeight" },
+    { id: "layerMerchantValue", key: "merchantValue" },
+    { id: "layerSteepness", key: "steepness" },
+    { id: "layerSlopeDirection", key: "slopeDirection" },
+    { id: "layerTrafficCount", key: "trafficCount" },
+    { id: "layerHabitable", key: "habitable" },
+    { id: "layerOccupied", key: "occupied" },
+    { id: "layerRoutes", key: "routes" },
+];
+
+function setupLayerButtons() {
+    // Vertex Inspector (independent, always on top)
+    select("#layerVertexInspector").mousePressed(() => {
+        layerStates.vertexInspector = !layerStates.vertexInspector;
+        updateLayerButtonState(
+            "layerVertexInspector",
+            layerStates.vertexInspector
+        );
+        redraw();
+    });
+
+    // Demonstration mode button
+    select("#layerDemonstration").mousePressed(() => {
+        toggleDemonstrationMode();
+    });
+
+    // Mutually exclusive layers
+    EXCLUSIVE_LAYERS.forEach((layer) => {
+        select(`#${layer.id}`).mousePressed(() => {
+            // Disable demonstration mode if user manually clicks a layer
+            if (demonstrationMode) {
+                toggleDemonstrationMode();
+            }
+            toggleExclusiveLayer(layer.id, layer.key);
+        });
+    });
+
+    // Independent layers
+    select("#layerPresentation").mousePressed(() => {
+        layerStates.presentation = !layerStates.presentation;
+        updateLayerButtonState("layerPresentation", layerStates.presentation);
+        invalidateBuffers("presentation");
+        redraw();
+    });
+
+    select("#layerElevation").mousePressed(() => {
+        layerStates.elevation = !layerStates.elevation;
+        updateLayerButtonState("layerElevation", layerStates.elevation);
+        redraw();
+    });
+
+    select("#layerWater").mousePressed(() => {
+        layerStates.water = !layerStates.water;
+        updateLayerButtonState("layerWater", layerStates.water);
+        redraw();
+    });
+}
+
+function toggleExclusiveLayer(buttonId, layerKey) {
+    // If clicking the same layer, turn it off
+    if (activeExclusiveLayer === layerKey) {
+        layerStates[layerKey] = false;
+        activeExclusiveLayer = null;
+        updateLayerButtonState(buttonId, false);
+    } else {
+        // Turn off previous layer
+        if (activeExclusiveLayer) {
+            layerStates[activeExclusiveLayer] = false;
+            const prevButtonId = getButtonIdForLayer(activeExclusiveLayer);
+            if (prevButtonId) updateLayerButtonState(prevButtonId, false);
+        }
+        // Turn on new layer
+        layerStates[layerKey] = true;
+        activeExclusiveLayer = layerKey;
+        updateLayerButtonState(buttonId, true);
+    }
+    redraw();
+}
+
+function getButtonIdForLayer(layerKey) {
+    const mapping = {
+        defense: "layerDefense",
+        security: "layerSecurity",
+        farmValue: "layerFarmValue",
+        farmerValue: "layerFarmerValue",
+        trafficWeight: "layerTrafficWeight",
+        merchantValue: "layerMerchantValue",
+        steepness: "layerSteepness",
+        slopeDirection: "layerSlopeDirection",
+        trafficCount: "layerTrafficCount",
+        habitable: "layerHabitable",
+        occupied: "layerOccupied",
+        routes: "layerRoutes",
+    };
+    return mapping[layerKey];
+}
+
+function updateLayerButtonState(buttonId, isActive) {
+    const btn = select(`#${buttonId}`);
+    if (btn) {
+        if (isActive) {
+            btn.addClass("active");
+        } else {
+            btn.removeClass("active");
+        }
+    }
+}
+
+/**
+ * Toggle demonstration mode on/off
+ */
+function toggleDemonstrationMode() {
+    demonstrationMode = !demonstrationMode;
+
+    const btn = select("#layerDemonstration");
+    if (btn) {
+        if (demonstrationMode) {
+            btn.addClass("active");
+            // Reset demo state
+            demoFrameCounter = 0;
+            demoCurrentLayerIndex = 0;
+            demoShowingLayer = true;
+            // Turn off any currently active layer
+            if (activeExclusiveLayer) {
+                layerStates[activeExclusiveLayer] = false;
+                const prevButtonId = getButtonIdForLayer(activeExclusiveLayer);
+                if (prevButtonId) updateLayerButtonState(prevButtonId, false);
+                activeExclusiveLayer = null;
+            }
+        } else {
+            btn.removeClass("active");
+            // Turn off current demo layer
+            if (
+                demoShowingLayer &&
+                demoCurrentLayerIndex < EXCLUSIVE_LAYERS.length
+            ) {
+                const currentLayer = EXCLUSIVE_LAYERS[demoCurrentLayerIndex];
+                layerStates[currentLayer.key] = false;
+                updateLayerButtonState(currentLayer.id, false);
+                activeExclusiveLayer = null;
+            }
+        }
+    }
+    redraw();
+}
+
+/**
+ * Update demonstration mode animation
+ * Call this from draw() every frame
+ */
+function updateDemonstrationMode() {
+    if (!demonstrationMode) return;
+
+    demoFrameCounter++;
+
+    if (demoFrameCounter >= DEMO_INTERVAL) {
+        demoFrameCounter = 0;
+
+        const currentLayer = EXCLUSIVE_LAYERS[demoCurrentLayerIndex];
+
+        if (demoShowingLayer) {
+            // Turn off current layer
+            layerStates[currentLayer.key] = false;
+            updateLayerButtonState(currentLayer.id, false);
+            activeExclusiveLayer = null;
+            demoShowingLayer = false;
+        } else {
+            // Move to next layer and turn it on
+            demoCurrentLayerIndex =
+                (demoCurrentLayerIndex + 1) % EXCLUSIVE_LAYERS.length;
+            const nextLayer = EXCLUSIVE_LAYERS[demoCurrentLayerIndex];
+
+            layerStates[nextLayer.key] = true;
+            updateLayerButtonState(nextLayer.id, true);
+            activeExclusiveLayer = nextLayer.key;
+            demoShowingLayer = true;
+        }
+
+        redraw();
+    }
+}
+
+// ============================================
+// Round Button Management
+// ============================================
+
+// Dual-click button tracking
+let clickTimers = {};
+const DOUBLE_CLICK_DELAY = 300; // milliseconds
+
+/**
+ * Setup a button with both single-click (toggle mode) and double-click (execute action) handlers
+ */
+function setupDualClickButton(buttonId, mode, doubleClickAction) {
+    const button = select(buttonId);
+    if (!button) return;
+
+    button.elt.addEventListener("click", (e) => {
+        const buttonKey = buttonId;
+
+        if (clickTimers[buttonKey]) {
+            // This is a double-click - clear timer and execute action
+            clearTimeout(clickTimers[buttonKey]);
+            delete clickTimers[buttonKey];
+            doubleClickAction();
+        } else {
+            // This is a single click - wait to see if double-click follows
+            clickTimers[buttonKey] = setTimeout(() => {
+                delete clickTimers[buttonKey];
+                toggleMouseMode(mode);
+            }, DOUBLE_CLICK_DELAY);
+        }
+    });
+}
+
+/**
+ * Apply tooltips from BUTTON_TIPS to HTML buttons
+ */
+function applyButtonTooltips() {
+    const tooltipMap = {
+        "#toggleDebugBtn": BUTTON_TIPS.toggleDebug,
+        "#autoSimBtn": BUTTON_TIPS.autoSim,
+        "#mouseModeRoad": BUTTON_TIPS.road,
+        "#mouseModeCastle": BUTTON_TIPS.castle,
+        "#mouseModeFarmer": BUTTON_TIPS.farmer,
+        "#mouseModeMerchant": BUTTON_TIPS.merchant,
+        "#mouseModeDelete": BUTTON_TIPS.delete,
+    };
+
+    Object.entries(tooltipMap).forEach(([selector, tooltip]) => {
+        const btn = select(selector);
+        if (btn) {
+            btn.attribute("title", tooltip);
+        }
+    });
+}
+
+function toggleMouseMode(mode) {
+    // Toggle mouse mode - if same mode clicked, turn off
+    if (mouseMode === mode) {
+        setMouseMode(null);
+        // Remove active class from all mouse mode buttons
+        select("#mouseModeRoad").removeClass("active");
+        select("#mouseModeCastle").removeClass("active");
+        select("#mouseModeFarmer").removeClass("active");
+        select("#mouseModeMerchant").removeClass("active");
+        select("#mouseModeDelete").removeClass("active");
+    } else {
+        setMouseMode(mode);
+        // Update button visual states
+        select("#mouseModeRoad").removeClass("active");
+        select("#mouseModeCastle").removeClass("active");
+        select("#mouseModeFarmer").removeClass("active");
+        select("#mouseModeMerchant").removeClass("active");
+        select("#mouseModeDelete").removeClass("active");
+
+        // Add active class to clicked button
+        if (mode === "road") select("#mouseModeRoad").addClass("active");
+        else if (mode === "castle")
+            select("#mouseModeCastle").addClass("active");
+        else if (mode === "farmer")
+            select("#mouseModeFarmer").addClass("active");
+        else if (mode === "merchant")
+            select("#mouseModeMerchant").addClass("active");
+        else if (mode === "delete")
+            select("#mouseModeDelete").addClass("active");
+    }
 }

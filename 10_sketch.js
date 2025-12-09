@@ -57,35 +57,6 @@ let autoSimulationActive = false; // Track if auto-simulation is running
 let autoSimFrameCounter = 0; // Count frames for spawning
 const AUTO_SIM_SPAWN_INTERVAL = 20; // Spawn every 20 frames
 
-// Dual-click button tracking
-let clickTimers = {};
-const DOUBLE_CLICK_DELAY = 300; // milliseconds
-
-/**
- * Setup a button with both single-click (toggle mode) and double-click (execute action) handlers
- */
-function setupDualClickButton(buttonId, mode, doubleClickAction) {
-    const button = select(buttonId);
-    if (!button) return;
-
-    button.elt.addEventListener("click", (e) => {
-        const buttonKey = buttonId;
-
-        if (clickTimers[buttonKey]) {
-            // This is a double-click - clear timer and execute action
-            clearTimeout(clickTimers[buttonKey]);
-            delete clickTimers[buttonKey];
-            doubleClickAction();
-        } else {
-            // This is a single click - wait to see if double-click follows
-            clickTimers[buttonKey] = setTimeout(() => {
-                delete clickTimers[buttonKey];
-                toggleMouseMode(mode);
-            }, DOUBLE_CLICK_DELAY);
-        }
-    });
-}
-
 // Graphics buffers for performance
 let elevationBuffer = null;
 let tilesBuffer = null;
@@ -127,6 +98,9 @@ async function setup() {
 
     // Load JSON first to get canvas dimensions
     await loadDefaultMap();
+
+    // Apply tooltips from BUTTON_TIPS
+    applyButtonTooltips();
 
     // Canvas size is set in processData() after JSON is loaded
     // Keep loop running for cloud animation
@@ -195,131 +169,6 @@ async function setup() {
 
     // Initialize mouse play UI (for backward compatibility with dynamic buttons in panel)
     initializeMousePlayUI();
-}
-
-// Layer button state management
-let activeExclusiveLayer = null;
-let layerStates = {
-    vertexInspector: false,
-    defense: false,
-    security: false,
-    farmValue: false,
-    farmerValue: false,
-    trafficWeight: false,
-    merchantValue: false,
-    steepness: false,
-    slopeDirection: false,
-    trafficCount: false,
-    habitable: false,
-    occupied: false,
-    routes: false,
-    presentation: true,
-    elevation: true,
-    water: true,
-};
-
-function setupLayerButtons() {
-    // Vertex Inspector (independent, always on top)
-    select("#layerVertexInspector").mousePressed(() => {
-        layerStates.vertexInspector = !layerStates.vertexInspector;
-        updateLayerButtonState(
-            "layerVertexInspector",
-            layerStates.vertexInspector
-        );
-        redraw();
-    });
-
-    // Mutually exclusive layers
-    const exclusiveLayers = [
-        { id: "layerDefense", key: "defense" },
-        { id: "layerSecurity", key: "security" },
-        { id: "layerFarmValue", key: "farmValue" },
-        { id: "layerFarmerValue", key: "farmerValue" },
-        { id: "layerTrafficWeight", key: "trafficWeight" },
-        { id: "layerMerchantValue", key: "merchantValue" },
-        { id: "layerSteepness", key: "steepness" },
-        { id: "layerSlopeDirection", key: "slopeDirection" },
-        { id: "layerTrafficCount", key: "trafficCount" },
-        { id: "layerHabitable", key: "habitable" },
-        { id: "layerOccupied", key: "occupied" },
-        { id: "layerRoutes", key: "routes" },
-    ];
-
-    exclusiveLayers.forEach((layer) => {
-        select(`#${layer.id}`).mousePressed(() => {
-            toggleExclusiveLayer(layer.id, layer.key);
-        });
-    });
-
-    // Independent layers
-    select("#layerPresentation").mousePressed(() => {
-        layerStates.presentation = !layerStates.presentation;
-        updateLayerButtonState("layerPresentation", layerStates.presentation);
-        invalidateBuffers("presentation");
-        redraw();
-    });
-
-    select("#layerElevation").mousePressed(() => {
-        layerStates.elevation = !layerStates.elevation;
-        updateLayerButtonState("layerElevation", layerStates.elevation);
-        redraw();
-    });
-
-    select("#layerWater").mousePressed(() => {
-        layerStates.water = !layerStates.water;
-        updateLayerButtonState("layerWater", layerStates.water);
-        redraw();
-    });
-}
-
-function toggleExclusiveLayer(buttonId, layerKey) {
-    // If clicking the same layer, turn it off
-    if (activeExclusiveLayer === layerKey) {
-        layerStates[layerKey] = false;
-        activeExclusiveLayer = null;
-        updateLayerButtonState(buttonId, false);
-    } else {
-        // Turn off previous layer
-        if (activeExclusiveLayer) {
-            layerStates[activeExclusiveLayer] = false;
-            const prevButtonId = getButtonIdForLayer(activeExclusiveLayer);
-            if (prevButtonId) updateLayerButtonState(prevButtonId, false);
-        }
-        // Turn on new layer
-        layerStates[layerKey] = true;
-        activeExclusiveLayer = layerKey;
-        updateLayerButtonState(buttonId, true);
-    }
-    redraw();
-}
-
-function getButtonIdForLayer(layerKey) {
-    const mapping = {
-        defense: "layerDefense",
-        security: "layerSecurity",
-        farmValue: "layerFarmValue",
-        farmerValue: "layerFarmerValue",
-        trafficWeight: "layerTrafficWeight",
-        merchantValue: "layerMerchantValue",
-        steepness: "layerSteepness",
-        slopeDirection: "layerSlopeDirection",
-        trafficCount: "layerTrafficCount",
-        habitable: "layerHabitable",
-        occupied: "layerOccupied",
-        routes: "layerRoutes",
-    };
-    return mapping[layerKey];
-}
-
-function updateLayerButtonState(buttonId, isActive) {
-    const btn = select(`#${buttonId}`);
-    if (btn) {
-        if (isActive) {
-            btn.addClass("active");
-        } else {
-            btn.removeClass("active");
-        }
-    }
 }
 
 function draw() {
@@ -476,6 +325,9 @@ function draw() {
             }
         }
     }
+
+    // Update demonstration mode animation
+    updateDemonstrationMode();
 
     // Draw elevation layer (cached)
     if (showElevation) {
@@ -721,6 +573,12 @@ function keyPressed() {
     if (keyCode === ESCAPE) {
         selectedVertex = null;
         redraw();
+        return false; // Prevent default behavior
+    }
+
+    // Toggle demonstration mode on D key
+    if (key === "d" || key === "D") {
+        toggleDemonstrationMode();
         return false; // Prevent default behavior
     }
 }
@@ -1432,7 +1290,7 @@ function drawTrafficHeatmap(scale) {
             vtx.surroundingTiles.length > 0
         ) {
             noStroke();
-            fill(255, 0, 0, map(vtx.traffic, 0, maxTraffic, 0, 200));
+            fill(255, 0, 0, 128); // 50% opacity
 
             beginShape();
             vtx.surroundingTiles.forEach((tile) => {
@@ -1746,38 +1604,6 @@ function toggleAutoSimulation() {
     }
 }
 
-function toggleMouseMode(mode) {
-    // Toggle mouse mode - if same mode clicked, turn off
-    if (mouseMode === mode) {
-        setMouseMode(null);
-        // Remove active class from all mouse mode buttons
-        select("#mouseModeRoad").removeClass("active");
-        select("#mouseModeCastle").removeClass("active");
-        select("#mouseModeFarmer").removeClass("active");
-        select("#mouseModeMerchant").removeClass("active");
-        select("#mouseModeDelete").removeClass("active");
-    } else {
-        setMouseMode(mode);
-        // Update button visual states
-        select("#mouseModeRoad").removeClass("active");
-        select("#mouseModeCastle").removeClass("active");
-        select("#mouseModeFarmer").removeClass("active");
-        select("#mouseModeMerchant").removeClass("active");
-        select("#mouseModeDelete").removeClass("active");
-
-        // Add active class to clicked button
-        if (mode === "road") select("#mouseModeRoad").addClass("active");
-        else if (mode === "castle")
-            select("#mouseModeCastle").addClass("active");
-        else if (mode === "farmer")
-            select("#mouseModeFarmer").addClass("active");
-        else if (mode === "merchant")
-            select("#mouseModeMerchant").addClass("active");
-        else if (mode === "delete")
-            select("#mouseModeDelete").addClass("active");
-    }
-}
-
 function resetSimulation() {
     simulationStep = 0;
     isFirstAutoSpawn = true;
@@ -2005,7 +1831,7 @@ function drawTrafficHeatmapToBuffer(buffer, scale) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(255, 0, 0, map(vtx.traffic, 0, maxTraffic, 0, 200));
+            buffer.fill(255, 0, 0, 128); // 50% opacity
 
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
@@ -2104,6 +1930,7 @@ function drawDefenseValueToBuffer(buffer) {
         ) {
             buffer.noStroke();
             let fillColor = lerpColor(from, to, v.defense / maxDefense);
+            fillColor.setAlpha(128); // 50% opacity
             buffer.fill(fillColor);
             buffer.beginShape();
             v.surroundingTiles.forEach((tile) => {
@@ -2133,7 +1960,7 @@ function drawSecurityValueToBuffer(buffer) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(255, 200, 0, map(vtx.security, 0, maxSecurity, 0, 200));
+            buffer.fill(255, 200, 0, 128); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2165,6 +1992,7 @@ function drawFarmValueLayerToBuffer(buffer) {
         ) {
             buffer.noStroke();
             let fillColor = lerpColor(from, to, vtx.farmValue / maxFarmValue);
+            fillColor.setAlpha(128); // 50% opacity
             buffer.fill(fillColor);
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
@@ -2186,7 +2014,7 @@ function drawFarmerValueLayerToBuffer(buffer) {
         if (v.farmerValue > maxFarmerValue) maxFarmerValue = v.farmerValue;
     });
     if (maxFarmerValue === 0) return;
-    buffer.colorMode(HSB);
+    buffer.colorMode(HSB, 360, 100, 100, 1); // HSB with alpha 0-1
     vertices.forEach((vtx) => {
         if (
             vtx.farmerValue > 0 &&
@@ -2201,7 +2029,7 @@ function drawFarmerValueLayerToBuffer(buffer) {
                 0,
                 120
             );
-            buffer.fill(hue, 100, 100, 150);
+            buffer.fill(hue, 100, 100, 0.5); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2245,7 +2073,7 @@ function drawMerchantValueLayerToBuffer(buffer) {
         // console.log("  Returning early: maxMerchantValue is 0");
         return;
     }
-    buffer.colorMode(HSB);
+    buffer.colorMode(HSB, 360, 100, 100, 1); // HSB with alpha 0-1
     vertices.forEach((vtx) => {
         if (
             vtx.merchantValue > 0 &&
@@ -2254,7 +2082,7 @@ function drawMerchantValueLayerToBuffer(buffer) {
         ) {
             buffer.noStroke();
             let hue = map(vtx.merchantValue, 0, maxMerchantValue, 200, 300);
-            buffer.fill(hue % 360, 100, 100, 150);
+            buffer.fill(hue % 360, 100, 100, 0.5); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2280,7 +2108,7 @@ function drawSteepnessLayerToBuffer(buffer) {
         }
     });
     if (verticesWithSteepness === 0 || maxSteepness === 0) return;
-    buffer.colorMode(HSB);
+    buffer.colorMode(HSB, 360, 100, 100, 1); // HSB with alpha 0-1
     vertices.forEach((vtx) => {
         if (
             vtx.steepness !== undefined &&
@@ -2290,7 +2118,7 @@ function drawSteepnessLayerToBuffer(buffer) {
         ) {
             buffer.noStroke();
             let hue = map(vtx.steepness, 0, maxSteepness, 240, 0);
-            buffer.fill(hue, 100, 100, 150);
+            buffer.fill(hue, 100, 100, 0.5); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2354,7 +2182,7 @@ function drawHabitableLayerToBuffer(buffer) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(0, 255, 0, 100);
+            buffer.fill(0, 255, 0, 128); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2374,7 +2202,7 @@ function drawOccupiedLayerToBuffer(buffer) {
             vtx.surroundingTiles.length > 0
         ) {
             buffer.noStroke();
-            buffer.fill(255, 0, 0, 150);
+            buffer.fill(255, 0, 0, 128); // 50% opacity
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {
                 buffer.vertex(tile.centerX, tile.centerY);
@@ -2406,7 +2234,7 @@ function drawTrafficCountLayerToBuffer(buffer) {
 
     if (maxTrafficCount === 0) return; // Nothing to show
 
-    buffer.colorMode(HSB);
+    buffer.colorMode(HSB, 360, 100, 100, 1); // HSB with alpha 0-1
     vertices.forEach((vtx) => {
         const trafficCount = vertexTrafficCounts.get(vtx.index);
         if (
@@ -2417,7 +2245,7 @@ function drawTrafficCountLayerToBuffer(buffer) {
             buffer.noStroke();
             // Blue to red gradient based on traffic intensity
             let hue = map(trafficCount, 0, maxTrafficCount, 240, 0);
-            buffer.fill(hue, 100, 100, 150);
+            buffer.fill(hue, 100, 100, 0.5); // 50% opacity
 
             buffer.beginShape();
             vtx.surroundingTiles.forEach((tile) => {

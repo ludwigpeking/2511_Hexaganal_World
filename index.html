@@ -12,20 +12,20 @@
         <script src="15_settlement.js"></script>
         <script src="14_values.js"></script>
         <script src="17_presentation.js"></script>
-        <script src="20_mousePlay.js"></script>
+        <script src="20_UI.js"></script>
         <script src="10_sketch.js"></script>
     </head>
     <body>
         <div id="canvas-container"></div>
 
         <!-- Right side control buttons -->
-        <button id="toggleDebugBtn" title="Toggle Debug Panel">⚙️</button>
-        <button id="autoSimBtn" title="Toggle Auto Simulation">▶️</button>
-        <button id="mouseModeRoad" title="Place Road">🛤️</button>
-        <button id="mouseModeCastle" title="Place Castle">🏰</button>
-        <button id="mouseModeFarmer" title="Place Farmer">👨‍🌾</button>
-        <button id="mouseModeMerchant" title="Place Merchant">🏪</button>
-        <button id="mouseModeDelete" title="Delete">🗑️</button>
+        <button id="toggleDebugBtn">⚙️</button>
+        <button id="autoSimBtn">▶️</button>
+        <button id="mouseModeRoad">🛤️</button>
+        <button id="mouseModeCastle">🏰</button>
+        <button id="mouseModeFarmer">👨‍🌾</button>
+        <button id="mouseModeMerchant">🏪</button>
+        <button id="mouseModeDelete">🗑️</button>
 
         <!-- Left side layer buttons -->
         <div id="left-panel">
@@ -36,6 +36,15 @@
                 title="Vertex Inspector"
             >
                 🔍
+            </button>
+
+            <!-- Demonstration Mode -->
+            <button
+                id="layerDemonstration"
+                class="layer-btn"
+                title="Demonstration Mode (D)"
+            >
+                🎬
             </button>
 
             <div class="layer-separator"></div>
