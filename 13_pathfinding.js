@@ -385,9 +385,11 @@ function createHardcodedRoute(startIndex, endIndex) {
 
 function clearRoutes() {
     routes = [];
-    topoData.vertices.forEach((v) => {
-        v.traffic = 0;
-    });
+    if (topoData && topoData.vertices) {
+        topoData.vertices.forEach((v) => {
+            v.traffic = 0;
+        });
+    }
     updateRouteStats();
     if (typeof invalidateBuffers !== "undefined") invalidateBuffers("static");
     redraw();

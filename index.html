@@ -16,9 +16,48 @@
         <script src="10_sketch.js"></script>
     </head>
     <body>
+        <!-- Title Screen Overlay -->
+        <div id="titleScreen">
+            <div class="title-content" id="homeContent">
+                <h1>An Evolutionary History of the City</h1>
+                <div class="main-buttons">
+                    <button id="btnKinect" class="title-btn">
+                        Connect to Kinect
+                    </button>
+                    <button id="btnAlteraCivitas" class="title-btn">
+                        Altera Civitas
+                    </button>
+                </div>
+            </div>
+            <div id="citySelection" class="city-selection hidden">
+                <div class="city-buttons-large">
+                    <button class="city-btn-large" data-city="hongkong">
+                        <img
+                            src="/assets/arts/hongkong_vignette.jpg"
+                            alt="Hong Kong"
+                        />
+                        <span class="city-label">Hong Kong</span>
+                    </button>
+                    <button class="city-btn-large" data-city="rome">
+                        <img src="/assets/arts/rome_vignette.jpg" alt="Rome" />
+                        <span class="city-label">Rome</span>
+                    </button>
+                    <button class="city-btn-large" data-city="tokyo">
+                        <img
+                            src="/assets/arts/tokyo_vignette.jpg"
+                            alt="Tokyo"
+                        />
+                        <span class="city-label">Tokyo</span>
+                    </button>
+                </div>
+                <button id="cityBackBtn" class="city-back-btn">← Back</button>
+            </div>
+        </div>
+
         <div id="canvas-container"></div>
 
         <!-- Right side control buttons -->
+        <button id="homeBtn">🏠</button>
         <button id="toggleDebugBtn">⚙️</button>
         <button id="autoSimBtn">▶️</button>
         <button id="mouseModeRoad">🛤️</button>
@@ -154,6 +193,13 @@
                 title="Water"
             >
                 🌊
+            </button>
+            <button
+                id="layerCloud"
+                class="layer-btn independent active"
+                title="Cloud"
+            >
+                ☁️
             </button>
         </div>
 

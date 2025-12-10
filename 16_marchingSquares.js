@@ -41,14 +41,19 @@ function drawQuadContours(
             normalizedAlt = Math.max(0, Math.min(1, normalizedAlt)); // Clamp to 0-1
         }
 
+        // Skip drawing if underwater - let background show through
         if (tileAltitude <= waterLevel) {
-            ctx.fillStyle = "#001a33";
-            ctx.strokeStyle = "#001a33";
-        } else {
-            const color = getElevationColor(tileAltitude, minElev, maxElev);
-            ctx.fillStyle = color;
-            ctx.strokeStyle = color;
+            return; // Don't draw anything, let sea image show
         }
+
+        const color = getElevationColor(
+            tileAltitude,
+            minElev,
+            maxElev,
+            waterLevel
+        );
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
 
         ctx.lineWidth = 1.2;
         ctx.beginPath();
@@ -63,11 +68,9 @@ function drawQuadContours(
 
     // Skip drawing base layer - water will be handled by sea image background
 
-    // Iterate through contour levels - only draw land above waterLevel
-    // Start from first contour above water level
-    const firstLandAltitude = waterLevel + contourInterval;
+    // Iterate through contour levels - start from waterLevel to ensure no gaps
     for (
-        let altitude = firstLandAltitude;
+        let altitude = waterLevel;
         altitude < maxElev;
         altitude += contourInterval
     ) {
@@ -91,7 +94,7 @@ function drawQuadContours(
         const state = getMarchingSquaresState(f0, f1, f2, f3);
 
         // Only draw land elevation colors (no water levels)
-        const color = getElevationColor(altitude, minElev, maxElev);
+        const color = getElevationColor(altitude, minElev, maxElev, waterLevel);
         ctx.fillStyle = color;
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.2;
@@ -305,9 +308,10 @@ function drawMarchingSquaresCase(ctx, state, verts, a, b, c, d) {
  * @param {number} elevation - Elevation value
  * @param {number} minElev - Minimum elevation
  * @param {number} maxElev - Maximum elevation
+ * @param {number} waterLevel - Water level elevation
  * @returns {string} HSL color string
  */
-function getElevationColor(elevation, minElev, maxElev) {
+function getElevationColor(elevation, minElev, maxElev, waterLevel) {
     const t = (elevation - waterLevel) / (Math.min(maxElev, 300) - waterLevel);
     // const t = elevation / 300;
 

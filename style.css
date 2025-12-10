@@ -9,6 +9,194 @@ body {
     overflow: hidden;
 }
 
+/* Title Screen Overlay */
+#titleScreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: url("assets/arts/romeEdo.png") center/cover no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+
+#titleScreen::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: -1;
+}
+
+#titleScreen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.title-content {
+    text-align: center;
+    color: white;
+}
+
+.title-content h1 {
+    font-family: Georgia, serif;
+    font-size: 48px;
+    font-weight: bold;
+    margin-bottom: 60px;
+    color: #f0e6d2;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    letter-spacing: 2px;
+}
+
+.title-content h2 {
+    font-family: Georgia, serif;
+    font-size: 32px;
+    margin-bottom: 30px;
+    color: #f0e6d2;
+}
+
+.main-buttons {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    margin-bottom: 40px;
+}
+
+.title-btn {
+    font-family: Georgia, serif;
+    font-size: 24px;
+    padding: 20px 40px;
+    background-color: rgba(153, 110, 79, 0.2);
+    color: #f0e6d2;
+    border: 1px solid #f0e6d2;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    min-width: 280px;
+    text-align: center;
+}
+
+.title-btn:hover {
+    background-color: rgba(139, 69, 19, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+}
+
+.city-selection {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.3s;
+}
+
+.city-selection.hidden {
+    display: none;
+}
+
+.city-buttons-large {
+    display: flex;
+    gap: 60px;
+    justify-content: center;
+    align-items: center;
+}
+
+.city-btn-large {
+    width: 400px;
+    height: 500px;
+    padding: 0;
+    border: 4px solid rgba(240, 230, 210, 0.6);
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.4s;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+    position: relative;
+}
+
+.city-btn-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.city-label {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: Georgia, serif;
+    font-size: 28px;
+    font-weight: bold;
+    color: #f0e6d2;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+}
+
+.city-btn-large:hover {
+    transform: translateY(-10px) scale(1.05);
+    border-color: rgba(240, 230, 210, 1);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+}
+
+.city-back-btn {
+    position: absolute;
+    bottom: 30px;
+    left: 30px;
+    font-family: Georgia, serif;
+    font-size: 14px;
+    padding: 8px 16px;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(240, 230, 210, 0.4);
+    border: 1px solid rgba(240, 230, 210, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.city-back-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: rgba(240, 230, 210, 0.8);
+    border-color: rgba(240, 230, 210, 0.4);
+}
+
+/* Hide old city button styles */
+.city-buttons {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.city-btn {
+    font-family: Georgia, serif;
+    font-size: 20px;
+    padding: 15px 30px;
+    background-color: rgba(240, 230, 210, 0.2);
+    color: #f0e6d2;
+    border: 2px solid #f0e6d2;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.city-btn:hover {
+    background-color: rgba(240, 230, 210, 0.4);
+    transform: translateY(-2px);
+}
+
 body {
     position: relative;
 }
@@ -69,12 +257,21 @@ canvas {
     background-color: rgba(100, 100, 100, 0.9);
 }
 
-#toggleDebugBtn {
+#homeBtn {
     top: 20px;
+    background-color: rgba(33, 150, 243, 0.9);
+}
+
+#homeBtn:hover {
+    background-color: rgba(25, 118, 210, 1);
+}
+
+#toggleDebugBtn {
+    top: 80px;
 }
 
 #autoSimBtn {
-    top: 80px;
+    top: 140px;
     background-color: rgba(76, 175, 80, 0.9);
 }
 
@@ -91,7 +288,7 @@ canvas {
 }
 
 #mouseModeRoad {
-    top: 140px;
+    top: 200px;
     background-color: rgba(158, 158, 158, 0.9);
 }
 
@@ -101,7 +298,7 @@ canvas {
 }
 
 #mouseModeCastle {
-    top: 200px;
+    top: 260px;
     background-color: rgba(156, 39, 176, 0.9);
 }
 
@@ -111,7 +308,7 @@ canvas {
 }
 
 #mouseModeFarmer {
-    top: 260px;
+    top: 320px;
     background-color: rgba(139, 195, 74, 0.9);
 }
 
@@ -121,7 +318,7 @@ canvas {
 }
 
 #mouseModeMerchant {
-    top: 320px;
+    top: 380px;
     background-color: rgba(255, 193, 7, 0.9);
 }
 
@@ -131,7 +328,7 @@ canvas {
 }
 
 #mouseModeDelete {
-    top: 380px;
+    top: 440px;
     background-color: rgba(244, 67, 54, 0.9);
 }
 

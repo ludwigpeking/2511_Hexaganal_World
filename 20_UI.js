@@ -440,6 +440,7 @@ let layerStates = {
     presentation: true,
     elevation: true,
     water: true,
+    cloud: true,
 };
 
 // Demonstration mode state
@@ -509,6 +510,12 @@ function setupLayerButtons() {
     select("#layerWater").mousePressed(() => {
         layerStates.water = !layerStates.water;
         updateLayerButtonState("layerWater", layerStates.water);
+        redraw();
+    });
+
+    select("#layerCloud").mousePressed(() => {
+        layerStates.cloud = !layerStates.cloud;
+        updateLayerButtonState("layerCloud", layerStates.cloud);
         redraw();
     });
 }

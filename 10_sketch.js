@@ -3,6 +3,8 @@
 // 2) save/load map
 // 3) map scenes: rome, london, beijing, tokyo, new york, seoul, buenos aires, cairo,
 // Global variables
+let appState = "TITLE"; // TITLE, KINECT, STATIC_MAP
+let currentCity = null; // Store selected city name
 let topoData = null;
 let vertices = [];
 let tiles = [];
@@ -97,8 +99,11 @@ async function setup() {
     cloudX = -cloudImage.width * CLOUD_SCALE - 500;
     cloudY = 1080; // Start below canvas
 
-    // Load JSON first to get canvas dimensions
-    await loadDefaultMap();
+    // Don't auto-load - wait for user selection
+    // Title screen will trigger loading
+
+    // Setup title screen event listeners
+    setupTitleScreen();
 
     // Apply tooltips from BUTTON_TIPS
     applyButtonTooltips();
@@ -128,6 +133,11 @@ async function setup() {
     select("#setUnhabitableLevelBtn").mousePressed(updateUnhabitableLevel);
     select("#toggleKinectBtn").mousePressed(toggleKinect);
 
+    // Home button - return to title screen
+    select("#homeBtn").mousePressed(() => {
+        returnToTitleScreen();
+    });
+
     // Toggle debug panel button
     select("#toggleDebugBtn").mousePressed(() => {
         const panel = select("#right-panel");
@@ -139,6 +149,7 @@ async function setup() {
     });
 
     // Apply round-btn class to all round buttons
+    select("#homeBtn").addClass("round-btn");
     select("#toggleDebugBtn").addClass("round-btn");
     select("#autoSimBtn").addClass("round-btn");
     select("#mouseModeRoad").addClass("round-btn");
@@ -419,8 +430,9 @@ function draw() {
     }
     image(staticContentBuffer, 0, 0);
 
-    // Draw animated cloud layer on top
-    if (cloudImage) {
+    // Draw animated cloud layer on top (if enabled)
+    const showCloud = layerStates.cloud;
+    if (cloudImage && showCloud) {
         // Calculate movement deltas based on angle
         // 50 degrees from right = 90 - 50 = 40 degrees from horizontal
         const angleRad = (40 * Math.PI) / 180;
@@ -601,6 +613,163 @@ function keyPressed() {
     }
 }
 
+function setupTitleScreen() {
+    const btnKinect = document.getElementById("btnKinect");
+    const btnAlteraCivitas = document.getElementById("btnAlteraCivitas");
+    const homeContent = document.getElementById("homeContent");
+    const citySelection = document.getElementById("citySelection");
+    const cityBackBtn = document.getElementById("cityBackBtn");
+    const cityButtons = document.querySelectorAll(".city-btn-large");
+
+    btnKinect.addEventListener("click", () => {
+        startKinectMode();
+    });
+
+    btnAlteraCivitas.addEventListener("click", () => {
+        homeContent.classList.add("hidden");
+        citySelection.classList.remove("hidden");
+    });
+
+    cityBackBtn.addEventListener("click", () => {
+        citySelection.classList.add("hidden");
+        homeContent.classList.remove("hidden");
+    });
+
+    cityButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const city = btn.getAttribute("data-city");
+            startStaticMapMode(city);
+        });
+    });
+}
+
+function hideTitleScreen() {
+    const titleScreen = document.getElementById("titleScreen");
+    titleScreen.classList.add("hidden");
+}
+
+function createCitySpecificRoute() {
+    // Define routes for each city
+    const cityRoutes = {
+        hongkong: { start: 281, end: 807 },
+        tokyo: { start: 871, end: 1270 },
+        rome: { start: 1018, end: 100 },
+    };
+
+    // Use current city if set, otherwise default to rome
+    const routeConfig =
+        currentCity && cityRoutes[currentCity]
+            ? cityRoutes[currentCity]
+            : cityRoutes["rome"];
+
+    createHardcodedRoute(routeConfig.start, routeConfig.end);
+}
+
+function resetSimulationState() {
+    // Reset settlement numbering to start from first lord
+    if (typeof settlementNr !== "undefined") {
+        settlementNr = 0;
+    }
+
+    // Reset auto-simulation spawn pattern to start with lord
+    isFirstAutoSpawn = true;
+
+    // Clear existing settlements and routes
+    if (typeof clearSettlements === "function") {
+        clearSettlements();
+    }
+    if (typeof clearRoutes === "function") {
+        clearRoutes();
+    }
+}
+
+function returnToTitleScreen() {
+    const titleScreen = document.getElementById("titleScreen");
+    const citySelection = document.getElementById("citySelection");
+
+    // Reset to home state
+    appState = "TITLE";
+    currentCity = null;
+
+    // Hide city selection menu
+    citySelection.classList.add("hidden");
+
+    // Show title screen
+    titleScreen.classList.remove("hidden");
+
+    // Stop kinect if running
+    if (kinectEnabled) {
+        toggleKinect();
+    }
+
+    // Stop auto-simulation if running
+    if (autoSimulationActive) {
+        toggleAutoSimulation();
+    }
+
+    // Clear the canvas
+    topoData = null;
+    vertices = [];
+    tiles = [];
+
+    // Reset water level to default
+    waterLevel = 10;
+}
+
+async function startKinectMode() {
+    appState = "KINECT";
+    hideTitleScreen();
+    await loadDefaultMap();
+    // Auto-enable kinect
+    await toggleKinect();
+}
+
+async function startStaticMapMode(city) {
+    appState = "STATIC_MAP";
+    currentCity = city;
+
+    // Set water level based on city
+    const cityWaterLevels = {
+        hongkong: 0,
+        tokyo: 0,
+        rome: 14,
+    };
+    waterLevel =
+        cityWaterLevels[city] !== undefined ? cityWaterLevels[city] : 10;
+
+    // Reset simulation state when switching cities
+    resetSimulationState();
+
+    hideTitleScreen();
+    await loadCityMap(city);
+}
+
+async function loadCityMap(city) {
+    updateProgress(`Loading ${city} map...`);
+    try {
+        // Map city names to file paths
+        const cityFiles = {
+            hongkong: "map/hongkong/hongkong_topo.json",
+            tokyo: "map/tokyo/topo_small.json",
+            rome: "results/topo_4_lowRes.json",
+        };
+
+        const filePath = cityFiles[city] || "results/topo_4_lowRes.json";
+        const response = await fetch(filePath);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const text = await response.text();
+        topoData = JSON.parse(text);
+        processData();
+    } catch (error) {
+        updateProgress(`Error loading ${city} map: ` + error.message);
+        console.error(error);
+        // Fallback to default map
+        await loadDefaultMap();
+    }
+}
+
 async function loadDefaultMap() {
     updateProgress("Loading default map...");
     try {
@@ -703,6 +872,9 @@ async function fetchKinectDepth() {
         kinectDepthData = data;
         kinectGridSize = size;
         kinectUpdateCount++;
+
+        // Reset settlement numbering (same logic as switching maps)
+        resetSimulationState();
 
         // Process depth data and rebuild topoData
         await processKinectDepthToTopo();
@@ -864,28 +1036,15 @@ async function processKinectDepthToTopo() {
     // Replace topoData and restart simulation
     topoData = newTopoData;
 
-    // Clear all simulation state
-    settlements = [];
-    settlementNr = 0; // Reset settlement counter
-    castleVertices = [];
-    habitable = [];
-    routes = [];
-    travelers = [];
-    tradeDestination1 = null;
-    tradeDestination2 = null;
+    // Reset all simulation state using centralized function
     simulationStep = 0;
-    isFirstAutoSpawn = true; // Reset first spawn flag
-    autoSimulationActive = false; // Stop auto-simulation
-    autoSimFrameCounter = 0; // Reset frame counter
-
-    // Stop auto simulation if running
     if (autoSimInterval) {
         clearInterval(autoSimInterval);
         autoSimInterval = null;
-        select("#autoSimulate").elt.checked = false;
     }
+    resetSimulationState();
 
-    // Update auto-sim button state
+    // Update UI state
     const autoSimBtn = select("#autoSimBtn");
     if (autoSimBtn) {
         autoSimBtn.removeClass("active");
@@ -1209,10 +1368,8 @@ function processData() {
     // Initialize simulation values for debug visualization
     initializeSimulationValues();
 
-    // Create hardcoded trade route from vertex 3461 to 2409
-    // createHardcodedRoute(3461, 2409); //full res version
-
-    createHardcodedRoute(1018, 100); //half res version
+    // Create hardcoded trade route based on current city
+    createCitySpecificRoute();
 
     updateProgress("Map loaded successfully!");
     invalidateBuffers("all");
@@ -1636,11 +1793,9 @@ function toggleAutoSimulation() {
 
 function resetSimulation() {
     simulationStep = 0;
-    isFirstAutoSpawn = true;
-    autoSimulationActive = false;
-    autoSimFrameCounter = 0;
-    clearRoutes();
-    clearSettlements();
+
+    // Use centralized reset function
+    resetSimulationState();
 
     if (autoSimInterval) {
         clearInterval(autoSimInterval);
@@ -1929,27 +2084,7 @@ function drawVerticesToBuffer(buffer, scale) {
 }
 
 function drawRouteEndpointsToBuffer(buffer, scale) {
-    if (tradeDestination1) {
-        buffer.fill(0, 255, 0);
-        buffer.stroke(0);
-        buffer.strokeWeight(2);
-        buffer.circle(tradeDestination1.x, tradeDestination1.y, 20);
-        buffer.fill(0);
-        buffer.noStroke();
-        buffer.textAlign(CENTER, CENTER);
-        buffer.text("TD1", tradeDestination1.x, tradeDestination1.y);
-    }
-
-    if (tradeDestination2) {
-        buffer.fill(255, 0, 255);
-        buffer.stroke(0);
-        buffer.strokeWeight(2);
-        buffer.circle(tradeDestination2.x, tradeDestination2.y, 20);
-        buffer.fill(0);
-        buffer.noStroke();
-        buffer.textAlign(CENTER, CENTER);
-        buffer.text("TD2", tradeDestination2.x, tradeDestination2.y);
-    }
+    // Trade destination markers removed - no longer drawing debug circles
 }
 
 function drawSteepSlopesToBuffer(buffer) {

@@ -85,6 +85,19 @@
         <div id="controls">
             <div style="margin-bottom: 15px">
                 <label
+                    for="hexMapInput"
+                    style="font-weight: bold; margin-right: 10px"
+                    >Load Hex Map JSON:</label
+                >
+                <input
+                    type="file"
+                    id="hexMapInput"
+                    accept=".json"
+                    onchange="handleHexMapUpload(event)"
+                />
+            </div>
+            <div style="margin-bottom: 15px">
+                <label
                     for="tiffInput"
                     style="font-weight: bold; margin-right: 10px"
                     >Load GeoTIFF:</label
@@ -97,7 +110,9 @@
                 />
             </div>
             <button onclick="exportResults()">Export Results JSON</button>
-            <div id="progress">Ready to load GeoTIFF...</div>
+            <div id="progress">
+                Select hex map JSON and GeoTIFF files to begin...
+            </div>
         </div>
 
         <div id="info">

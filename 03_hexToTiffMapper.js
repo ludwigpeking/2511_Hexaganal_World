@@ -8,6 +8,10 @@ let ctx = null;
 // Default water level for presentation
 let waterLevel = 1;
 
+// Track selected files
+let selectedHexMapFile = null;
+let selectedTiffFile = null;
+
 // Coordinate mapping parameters
 let mapping = {
     hexCenter: { x: 0, y: 0 },
@@ -21,21 +25,46 @@ let mapping = {
     offsetY: 0,
 };
 
+async function handleHexMapUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    selectedHexMapFile = file;
+    updateProgress("Hex map JSON loaded. Now select a GeoTIFF file...");
+
+    // If both files are selected, start processing
+    if (selectedTiffFile) {
+        await loadAndMap(selectedHexMapFile, selectedTiffFile);
+    }
+}
+
 async function handleTiffUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    updateProgress("Processing uploaded GeoTIFF...");
-    await loadAndMap(file);
+    selectedTiffFile = file;
+
+    // If both files are selected, start processing
+    if (selectedHexMapFile) {
+        updateProgress("Processing files...");
+        await loadAndMap(selectedHexMapFile, selectedTiffFile);
+    } else {
+        updateProgress("GeoTIFF loaded. Now select a hex map JSON file...");
+    }
 }
 
-async function loadAndMap(tiffFile = null) {
+async function loadAndMap(hexMapFile = null, tiffFile = null) {
     updateProgress("Loading hexagonal map...");
 
     try {
         // Load hexagonal map JSON
-        const hexResponse = await fetch("results/map_4_small.json");
-        hexMapData = await hexResponse.json();
+        if (hexMapFile) {
+            const text = await hexMapFile.text();
+            hexMapData = JSON.parse(text);
+        } else {
+            const hexResponse = await fetch("results/map_4_small.json");
+            hexMapData = await hexResponse.json();
+        }
 
         updateProgress("Loading GeoTIFF...");
 
@@ -553,5 +582,6 @@ function visualizeMapping() {
 document.addEventListener("DOMContentLoaded", () => {
     canvas = document.getElementById("mapCanvas");
     ctx = canvas.getContext("2d");
-    // loadAndMap(); // Wait for user to select file, or uncomment to auto-load default
+    // Uncomment to auto-load with default files:
+    // loadAndMap(); // Uses hardcoded paths: results/map_4_small.json and map/rome/output_hh.tif
 });
