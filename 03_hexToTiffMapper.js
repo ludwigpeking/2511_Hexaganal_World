@@ -5,6 +5,9 @@ let mappedVertices = [];
 let canvas = null;
 let ctx = null;
 
+// Default water level for presentation
+let waterLevel = 1;
+
 // Coordinate mapping parameters
 let mapping = {
     hexCenter: { x: 0, y: 0 },
@@ -18,7 +21,15 @@ let mapping = {
     offsetY: 0,
 };
 
-async function loadAndMap() {
+async function handleTiffUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    updateProgress("Processing uploaded GeoTIFF...");
+    await loadAndMap(file);
+}
+
+async function loadAndMap(tiffFile = null) {
     updateProgress("Loading hexagonal map...");
 
     try {
@@ -29,8 +40,13 @@ async function loadAndMap() {
         updateProgress("Loading GeoTIFF...");
 
         // Load GeoTIFF
-        const tiffResponse = await fetch("map/rome/output_hh.tif");
-        const arrayBuffer = await tiffResponse.arrayBuffer();
+        let arrayBuffer;
+        if (tiffFile) {
+            arrayBuffer = await tiffFile.arrayBuffer();
+        } else {
+            const tiffResponse = await fetch("map/rome/output_hh.tif");
+            arrayBuffer = await tiffResponse.arrayBuffer();
+        }
         const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
         tiffImage = await tiff.getImage();
         tiffData = await tiffImage.readRasters();
@@ -481,7 +497,8 @@ function visualizeMapping() {
             vertexElevs,
             minElev,
             maxElev,
-            contourInterval
+            contourInterval,
+            waterLevel
         );
     });
 
@@ -533,8 +550,8 @@ function visualizeMapping() {
 }
 
 // Auto-load on page load
-window.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", () => {
     canvas = document.getElementById("mapCanvas");
     ctx = canvas.getContext("2d");
-    loadAndMap();
+    // loadAndMap(); // Wait for user to select file, or uncomment to auto-load default
 });

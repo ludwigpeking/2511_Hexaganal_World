@@ -1,6 +1,7 @@
 //TODOs:
 // 1) moveCost reduction by traffic logic
-// 2) slope adjusted
+// 2) save/load map
+// 3) map scenes: rome, london, beijing, tokyo, new york, seoul, buenos aires, cairo,
 // Global variables
 let topoData = null;
 let vertices = [];

@@ -3,24 +3,50 @@
     <head>
         <meta charset="utf-8" />
         <title>Hex Map to GeoTIFF Mapper</title>
-        <link rel="stylesheet" href="style.css" />
-        <script src="https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist-browser/geotiff.js"></script>
-        <script src="16_marchingSquares.js"></script>
-        <script src="03_hexToTiffMapper.js"></script>
+        <script
+            defer
+            src="https://cdn.jsdelivr.net/npm/geotiff@2.0.7/dist-browser/geotiff.js"
+        ></script>
+        <script defer src="16_marchingSquares.js"></script>
+        <script defer src="03_hexToTiffMapper.js"></script>
         <style>
             body {
-                display: block;
+                display: block !important;
                 overflow: auto;
                 padding: 20px;
                 background: #f0f0f0;
             }
+            #controls {
+                background: white;
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            #controls button {
+                padding: 10px 20px;
+                font-size: 16px;
+                cursor: pointer;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+            #controls button:hover {
+                background: #0056b3;
+            }
+            #progress {
+                margin-top: 10px;
+                font-weight: bold;
+                color: #333;
+            }
             #canvas-container {
                 background: white;
                 padding: 20px;
-                display: inline-block;
+                display: block;
+                margin-bottom: 20px;
             }
             canvas {
                 border: 1px solid #000;
+                display: block;
             }
             #info {
                 background: white;
@@ -57,12 +83,21 @@
         <h1>Hex Map to GeoTIFF Mapper</h1>
 
         <div id="controls">
+            <div style="margin-bottom: 15px">
+                <label
+                    for="tiffInput"
+                    style="font-weight: bold; margin-right: 10px"
+                    >Load GeoTIFF:</label
+                >
+                <input
+                    type="file"
+                    id="tiffInput"
+                    accept=".tif,.tiff"
+                    onchange="handleTiffUpload(event)"
+                />
+            </div>
             <button onclick="exportResults()">Export Results JSON</button>
-            <div id="progress">Loading...</div>
-        </div>
-
-        <div id="canvas-container">
-            <canvas id="mapCanvas" width="1920" height="1080"></canvas>
+            <div id="progress">Ready to load GeoTIFF...</div>
         </div>
 
         <div id="info">
@@ -77,6 +112,10 @@
                 <span id="legend-min">Min</span>
                 <span id="legend-max">Max</span>
             </div>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="mapCanvas" width="1920" height="1080"></canvas>
         </div>
     </body>
 </html>
