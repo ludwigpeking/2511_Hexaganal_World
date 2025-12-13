@@ -2,6 +2,10 @@
 // 1) moveCost reduction by traffic logic
 // 2) save/load map
 // 3) map scenes: rome, london, beijing, tokyo, new york, seoul, buenos aires, cairo,
+// 4) hexagon quad relaxation improvement
+// 5) global variables to debug panel
+// 6) water traffic value propogate on water
+// 7）button art improvements
 // Global variables
 let appState = "TITLE"; // TITLE, KINECT, STATIC_MAP
 let currentCity = null; // Store selected city name
