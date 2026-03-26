@@ -11,6 +11,7 @@
 const BUTTON_TIPS = {
     toggleDebug: "Debug Panel",
     autoSim: "Auto Simulation",
+    recordVideo: "Record 6000 Frames to Video",
     road: "Road Mode",
     castle: "Castle Mode | Add a Castle",
     farmer: "Farmer Mode | Add a Farmer",
@@ -335,7 +336,7 @@ function deleteOwner(vertex) {
 
     // Find settlement at this vertex
     const settlementIndex = settlements.findIndex(
-        (s) => s.vertex.index === vertex.index
+        (s) => s.vertex.index === vertex.index,
     );
 
     if (settlementIndex !== -1) {
@@ -357,7 +358,7 @@ function deleteOwner(vertex) {
 
             // Remove from castleVertices
             const castleIndex = castleVertices.findIndex(
-                (v) => v.index === vertex.index
+                (v) => v.index === vertex.index,
             );
             if (castleIndex !== -1) {
                 castleVertices.splice(castleIndex, 1);
@@ -390,7 +391,7 @@ function deleteOwner(vertex) {
         //     `Deleted ${settlement.profession} from vertex ${vertex.index}`
         // );
         updateProgress(
-            `Deleted ${settlement.profession} from vertex ${vertex.index}`
+            `Deleted ${settlement.profession} from vertex ${vertex.index}`,
         );
     } else if (vertex.occupiedByRoute) {
         // Just clear route marker
@@ -472,7 +473,7 @@ function setupLayerButtons() {
         layerStates.vertexInspector = !layerStates.vertexInspector;
         updateLayerButtonState(
             "layerVertexInspector",
-            layerStates.vertexInspector
+            layerStates.vertexInspector,
         );
         redraw();
     });
@@ -684,6 +685,7 @@ function applyButtonTooltips() {
     const tooltipMap = {
         "#toggleDebugBtn": BUTTON_TIPS.toggleDebug,
         "#autoSimBtn": BUTTON_TIPS.autoSim,
+        "#recordVideoBtn": BUTTON_TIPS.recordVideo,
         "#mouseModeRoad": BUTTON_TIPS.road,
         "#mouseModeCastle": BUTTON_TIPS.castle,
         "#mouseModeFarmer": BUTTON_TIPS.farmer,

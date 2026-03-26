@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
     <head>
         <meta charset="utf-8" />
@@ -119,9 +119,31 @@
                 ctx.fillStyle = "#f5f5f5";
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                // Scale coordinates from 800x800 to current canvas size
-                const scale = canvas.width / 800;
+                // Calculate bounds from map data
+                let minX = Infinity,
+                    maxX = -Infinity;
+                let minY = Infinity,
+                    maxY = -Infinity;
+
+                mapData.tiles.forEach((tile) => {
+                    tile.vertices.forEach((v) => {
+                        minX = Math.min(minX, v.x);
+                        maxX = Math.max(maxX, v.x);
+                        minY = Math.min(minY, v.y);
+                        maxY = Math.max(maxY, v.y);
+                    });
+                });
+
+                const mapWidth = maxX - minX;
+                const mapHeight = maxY - minY;
+                const padding = 20;
+                const scaleX = (canvas.width - 2 * padding) / mapWidth;
+                const scaleY = (canvas.height - 2 * padding) / mapHeight;
+                const scale = Math.min(scaleX, scaleY);
+
                 ctx.save();
+                ctx.translate(padding, padding);
+                ctx.translate(-minX * scale, -minY * scale);
                 ctx.scale(scale, scale);
 
                 // First, highlight neighbors if a tile is selected
@@ -131,7 +153,7 @@
                         drawTileHighlight(
                             mapData.tiles[neighborId],
                             "rgba(255, 165, 0, 0.8)",
-                            3
+                            3,
                         );
                     });
                 }
@@ -202,7 +224,7 @@
 
                 const areas = mapData.tiles.map((t) => t.area);
                 const neighborCounts = mapData.tiles.map(
-                    (t) => t.neighbors.length
+                    (t) => t.neighbors.length,
                 );
 
                 const stats = `
@@ -225,8 +247,8 @@
                 <div class="stat-row">
                     <span class="stat-label">Min/Max Area:</span>
                     <span>${Math.min(...areas).toFixed(2)} / ${Math.max(
-                    ...areas
-                ).toFixed(2)}</span>
+                        ...areas,
+                    ).toFixed(2)}</span>
                 </div>
                 <div class="stat-row">
                     <span class="stat-label">Avg Neighbors:</span>
@@ -264,7 +286,7 @@
             function toggleNeighbors() {
                 // Click on a tile to highlight its neighbors
                 alert(
-                    "Click on a tile in the canvas to highlight its neighbors"
+                    "Click on a tile in the canvas to highlight its neighbors",
                 );
             }
 
@@ -288,10 +310,31 @@
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
 
-                // Scale click coordinates back to original 800x800 coordinate system
-                const scale = 800 / canvas.width;
-                const scaledX = x * scale;
-                const scaledY = y * scale;
+                // Calculate bounds from map data (same as displayMap)
+                let minX = Infinity,
+                    maxX = -Infinity;
+                let minY = Infinity,
+                    maxY = -Infinity;
+
+                mapData.tiles.forEach((tile) => {
+                    tile.vertices.forEach((v) => {
+                        minX = Math.min(minX, v.x);
+                        maxX = Math.max(maxX, v.x);
+                        minY = Math.min(minY, v.y);
+                        maxY = Math.max(maxY, v.y);
+                    });
+                });
+
+                const mapWidth = maxX - minX;
+                const mapHeight = maxY - minY;
+                const padding = 20;
+                const scaleX = (canvas.width - 2 * padding) / mapWidth;
+                const scaleY = (canvas.height - 2 * padding) / mapHeight;
+                const scale = Math.min(scaleX, scaleY);
+
+                // Unscale click coordinates back to map space
+                const scaledX = (x - padding) / scale + minX;
+                const scaledY = (y - padding) / scale + minY;
 
                 // Find clicked tile
                 for (let i = 0; i < mapData.tiles.length; i++) {
@@ -318,7 +361,7 @@
                         <div class="stat-row">
                             <span class="stat-label">Center:</span>
                             <span>(${tile.center.x.toFixed(
-                                1
+                                1,
                             )}, ${tile.center.y.toFixed(1)})</span>
                         </div>
                         <div class="stat-row">
@@ -377,7 +420,7 @@
             ctx.fillText(
                 "Load a map JSON file to begin",
                 canvas.width / 2,
-                canvas.height / 2
+                canvas.height / 2,
             );
         </script>
     </body>

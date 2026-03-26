@@ -22,8 +22,14 @@ function pathFinding(start, end, trafficWeight) {
         v.from = null;
     });
 
-    const downhillFactor = parseFloat(select("#downhillFactor").value());
-    const flatTerrainCost = parseFloat(select("#flatTerrainCost").value());
+    const downhillInput = select("#downhillFactor");
+    const flatTerrainInput = select("#flatTerrainCost");
+    const downhillFactor = downhillInput
+        ? parseFloat(downhillInput.value())
+        : 0.3;
+    const flatTerrainCost = flatTerrainInput
+        ? parseFloat(flatTerrainInput.value())
+        : 2;
 
     let openSet = [];
     let closeSet = [];
@@ -42,7 +48,7 @@ function pathFinding(start, end, trafficWeight) {
 
         for (let neighborData of current.neighbors) {
             const neighbor = topoData.vertices.find(
-                (v) => v.index === neighborData.vertexIndex
+                (v) => v.index === neighborData.vertexIndex,
             );
             if (!neighbor) continue;
             if (closeSet.includes(neighbor)) continue;
@@ -110,7 +116,7 @@ function pathFinding(start, end, trafficWeight) {
         const neighborTrafficAdded = new Set();
         pathVertices.forEach((pathIndex) => {
             const pathVertex = topoData.vertices.find(
-                (v) => v.index === pathIndex
+                (v) => v.index === pathIndex,
             );
             if (pathVertex) {
                 pathVertex.neighbors.forEach((neighborData) => {
@@ -121,7 +127,7 @@ function pathFinding(start, end, trafficWeight) {
                         !neighborTrafficAdded.has(neighborIndex)
                     ) {
                         const neighbor = topoData.vertices.find(
-                            (v) => v.index === neighborIndex
+                            (v) => v.index === neighborIndex,
                         );
                         if (neighbor) {
                             neighbor.traffic += trafficWeight * 0.5; // Neighbors get half the traffic
@@ -138,16 +144,16 @@ function pathFinding(start, end, trafficWeight) {
             const currentIndex = path[i];
             const nextIndex = path[i + 1];
             const currentVertex = topoData.vertices.find(
-                (v) => v.index === currentIndex
+                (v) => v.index === currentIndex,
             );
             const nextVertex = topoData.vertices.find(
-                (v) => v.index === nextIndex
+                (v) => v.index === nextIndex,
             );
 
             if (currentVertex && nextVertex) {
                 // Increment trafficCount on the edge from current to next
                 const forwardEdge = currentVertex.neighbors.find(
-                    (n) => n.vertexIndex === nextIndex
+                    (n) => n.vertexIndex === nextIndex,
                 );
                 if (forwardEdge) {
                     if (forwardEdge.trafficCount === undefined)
@@ -157,7 +163,7 @@ function pathFinding(start, end, trafficWeight) {
 
                 // Increment trafficCount on the edge from next to current (mutual)
                 const backwardEdge = nextVertex.neighbors.find(
-                    (n) => n.vertexIndex === currentIndex
+                    (n) => n.vertexIndex === currentIndex,
                 );
                 if (backwardEdge) {
                     if (backwardEdge.trafficCount === undefined)
@@ -176,7 +182,7 @@ function pathFinding(start, end, trafficWeight) {
                 // Calculate sum of all edge traffic counts (same as Traffic Count debug layer)
                 const totalEdgeTraffic = vertex.neighbors.reduce(
                     (sum, n) => sum + (n.trafficCount || 0),
-                    0
+                    0,
                 );
                 const wasOccupied = vertex.occupiedByRoute;
                 if (totalEdgeTraffic >= 12) {
@@ -206,7 +212,7 @@ function pathFinding(start, end, trafficWeight) {
                     patternAtlas,
                     vertex,
                     topoData.tiles,
-                    vertexMap
+                    vertexMap,
                 );
             });
         }
@@ -232,13 +238,13 @@ function calculateRouteStats(route) {
 
     for (let i = 0; i < route.path.length - 1; i++) {
         const currentVertex = topoData.vertices.find(
-            (v) => v.index === route.path[i]
+            (v) => v.index === route.path[i],
         );
         const nextVertex = topoData.vertices.find(
-            (v) => v.index === route.path[i + 1]
+            (v) => v.index === route.path[i + 1],
         );
         const neighborData = currentVertex.neighbors.find(
-            (n) => n.vertexIndex === nextVertex.index
+            (n) => n.vertexIndex === nextVertex.index,
         );
 
         if (neighborData) {
@@ -270,10 +276,11 @@ function createRandomRoute() {
         topoData.mapping.hexWidth * topoData.mapping.hexToCanvasScale * 0.5
     );
 
-    const trafficWeight = parseFloat(select("#trafficWeight").value());
+    const trafficInput = select("#trafficWeight");
+    const trafficWeight = trafficInput ? parseFloat(trafficInput.value()) : 12;
 
     updateProgress(
-        `Finding route from vertex ${start.index} to ${end.index}...`
+        `Finding route from vertex ${start.index} to ${end.index}...`,
     );
 
     const path = pathFinding(start, end, trafficWeight);
@@ -286,7 +293,7 @@ function createRandomRoute() {
         updateProgress(
             `Route created! Length: ${
                 path.length
-            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
+            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`,
         );
         updateRouteStats();
         if (typeof invalidateBuffers !== "undefined")
@@ -315,7 +322,7 @@ function createRandomTravel() {
     const trafficWeight = 2;
 
     updateProgress(
-        `Random travel from ${settlement1.profession} to ${settlement2.profession}...`
+        `Random travel from ${settlement1.profession} to ${settlement2.profession}...`,
     );
 
     const path = pathFinding(start, end, trafficWeight);
@@ -328,7 +335,7 @@ function createRandomTravel() {
         updateProgress(
             `Travel route created! Length: ${
                 path.length
-            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
+            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`,
         );
         updateRouteStats();
         if (typeof invalidateBuffers !== "undefined")
@@ -355,10 +362,11 @@ function createHardcodedRoute(startIndex, endIndex) {
     tradeDestination2 = end;
     // console.log(`Trade destinations set: ${startIndex} and ${endIndex}`);
 
-    const trafficWeight = parseFloat(select("#trafficWeight").value());
+    const trafficInput = select("#trafficWeight");
+    const trafficWeight = trafficInput ? parseFloat(trafficInput.value()) : 12;
 
     updateProgress(
-        `Finding hardcoded route from vertex ${startIndex} to ${endIndex}...`
+        `Finding hardcoded route from vertex ${startIndex} to ${endIndex}...`,
     );
 
     const path = pathFinding(start, end, trafficWeight);
@@ -371,14 +379,14 @@ function createHardcodedRoute(startIndex, endIndex) {
         updateProgress(
             `Hardcoded route created! Length: ${
                 path.length
-            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`
+            } vertices, Distance: ${route.totalDistance.toFixed(0)}m`,
         );
         updateRouteStats();
         if (typeof invalidateBuffers !== "undefined")
             invalidateBuffers("static");
     } else {
         updateProgress(
-            `Failed to find hardcoded route from ${startIndex} to ${endIndex}!`
+            `Failed to find hardcoded route from ${startIndex} to ${endIndex}!`,
         );
     }
 }
@@ -397,8 +405,12 @@ function clearRoutes() {
 }
 
 function updateRouteStats() {
+    const statsEl = select("#route-stats");
+    // Guard for minimal UIs (e.g., index-large.html) that omit the stats container
+    if (!statsEl) return;
+
     if (routes.length === 0) {
-        select("#route-stats").html("No routes created yet");
+        statsEl.html("No routes created yet");
         return;
     }
 
@@ -416,5 +428,5 @@ function updateRouteStats() {
         `;
     });
 
-    select("#route-stats").html(html);
+    statsEl.html(html);
 }

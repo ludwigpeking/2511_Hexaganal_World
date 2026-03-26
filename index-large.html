@@ -1,0 +1,256 @@
+<!doctype html>
+<!-- a principle: we try not to change 10_sketch.js for the purpose of index_large.html
+ -->
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>World Simulator - Large Rome</title>
+        <link rel="stylesheet" href="style.css" />
+        <style>
+            /* Fixed-size canvas for 1:1 pixels; allow page scroll */
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: auto;
+                background: #000;
+            }
+            #canvas-container {
+                position: relative;
+                width: 3840px;
+                height: 2160px;
+                overflow: visible;
+                background: #000;
+            }
+            canvas {
+                width: 3840px !important;
+                height: 2160px !important;
+                display: block;
+            }
+            /* Skip title screen/UI selection for this build */
+            #titleScreen {
+                display: none !important;
+            }
+        </style>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+        <script src="assets/sounds/music.js"></script>
+        <script src="11_utils.js"></script>
+        <script src="12_vertex.js"></script>
+        <script src="16_marchingSquares.js"></script>
+        <script src="13_pathfinding.js"></script>
+        <script src="15_settlement.js"></script>
+        <script src="14_values.js"></script>
+        <script src="17_presentation.js"></script>
+        <script src="20_UI.js"></script>
+        <script src="21_saveLoad.js"></script>
+        <script>
+            // Configure large-canvas run before sketch loads
+            window.LARGE_CANVAS_WIDTH = 3840;
+            window.LARGE_CANVAS_HEIGHT = 2160;
+            window.FORCE_TOPO_PATH = "results/large_rome.json";
+        </script>
+        <script src="10_sketch.js"></script>
+        <script>
+            // Override createCitySpecificRoute for large_rome dataset
+            // Uses vertices 2409 and 3319 as hardcoded trade route endpoints
+            createCitySpecificRoute = function () {
+                createHardcodedRoute(2409, 3319);
+            };
+
+            // Override auto-simulation settings for faster batch processing
+            // Spawn every frame instead of every 20 frames
+            window.AUTO_SIM_SPAWN_INTERVAL = 1;
+            // Increase settlement limit to 3000 for large-scale simulation
+            window.AUTO_SIM_SETTLEMENT_LIMIT = 3000;
+        </script>
+    </head>
+    <body>
+        <div id="canvas-container"></div>
+
+        <!-- Right side control buttons -->
+        <button id="autoSimBtn">▶️</button>
+        <button id="recordVideoBtn">⏺️</button>
+        <button id="mouseModeRoad">🛤️</button>
+        <button id="mouseModeCastle">🏯</button>
+        <button id="mouseModeFarmer">👨‍🌾</button>
+        <button id="mouseModeMerchant">🏪</button>
+        <button id="mouseModeDelete">🗑️</button>
+        <button id="saveBtn">💾</button>
+        <button id="loadBtn">📂</button>
+        <button id="homeBtn">🏠</button>
+        <button id="toggleDebugBtn">⚙️</button>
+
+        <!-- Hidden file input for loading saved simulations -->
+        <input
+            type="file"
+            id="loadFileInput"
+            accept=".json"
+            style="display: none"
+        />
+
+        <!-- Left side layer buttons -->
+        <div id="left-panel">
+            <button
+                id="layerVertexInspector"
+                class="layer-btn"
+                title="Vertex Inspector"
+            >
+                🔍
+            </button>
+            <button
+                id="layerDemonstration"
+                class="layer-btn"
+                title="Demonstration Mode (D)"
+            >
+                🎬
+            </button>
+            <div class="layer-separator"></div>
+            <button
+                id="layerDefense"
+                class="layer-btn exclusive"
+                title="Defense Value"
+            >
+                🏯
+            </button>
+            <button
+                id="layerSecurity"
+                class="layer-btn exclusive"
+                title="Security Value"
+            >
+                👁️
+            </button>
+            <button
+                id="layerFarmValue"
+                class="layer-btn exclusive"
+                title="Farm Value"
+            >
+                🌾
+            </button>
+            <button
+                id="layerFarmerValue"
+                class="layer-btn exclusive"
+                title="Farmer Value"
+            >
+                🏡
+            </button>
+            <button
+                id="layerTrafficWeight"
+                class="layer-btn exclusive"
+                title="Pedestrian Value"
+            >
+                👣
+            </button>
+            <button
+                id="layerMerchantValue"
+                class="layer-btn exclusive"
+                title="Merchant Value"
+            >
+                💰
+            </button>
+            <button
+                id="layerSteepness"
+                class="layer-btn exclusive"
+                title="Steepness"
+            >
+                ⛰️
+            </button>
+            <button
+                id="layerSlopeDirection"
+                class="layer-btn exclusive"
+                title="Slope Direction"
+            >
+                💧
+            </button>
+            <button
+                id="layerTrafficCount"
+                class="layer-btn exclusive"
+                title="Traffic Count"
+            >
+                🔢
+            </button>
+            <button
+                id="layerHabitable"
+                class="layer-btn exclusive"
+                title="Habitable"
+            >
+                🟢
+            </button>
+            <button
+                id="layerOccupied"
+                class="layer-btn exclusive"
+                title="Occupied"
+            >
+                🔴
+            </button>
+            <button id="layerRoutes" class="layer-btn exclusive" title="Routes">
+                ⛗
+            </button>
+            <div class="layer-separator"></div>
+            <button
+                id="layerPresentation"
+                class="layer-btn independent active"
+                title="City"
+            >
+                🏙️
+            </button>
+            <button
+                id="layerElevation"
+                class="layer-btn independent active"
+                title="Topography"
+            >
+                🗺️
+            </button>
+            <button
+                id="layerWater"
+                class="layer-btn independent active"
+                title="Water"
+            >
+                🌊
+            </button>
+            <button
+                id="layerCloud"
+                class="layer-btn independent active"
+                title="Cloud"
+            >
+                ☁️
+            </button>
+        </div>
+
+        <div id="right-panel" class="hidden">
+            <h1>🌍 World Simulator</h1>
+            <div id="controls">
+                <div>
+                    <strong>File:</strong>
+                    <button id="loadFileBtn">Load Topology File</button>
+                    <input type="file" id="fileInput" accept=".json" />
+                    <button id="resetSimBtn">Reset Simulation</button>
+                    <button id="toggleKinectBtn">Enable Kinect</button>
+                </div>
+                <div>
+                    <strong>Pathfinding:</strong>
+                    <button id="createRouteBtn">Create Random Route</button>
+                    <button id="clearRoutesBtn">Clear All Routes</button>
+                </div>
+                <div id="caste-group">
+                    <strong>Castes:</strong>
+                    <button id="randomTravelBtn">Random Travel</button>
+                </div>
+                <div>
+                    <label>Simulation Speed:</label>
+                    <input
+                        type="number"
+                        id="simSpeed"
+                        value="1"
+                        step="1"
+                        min="1"
+                        max="10"
+                    />
+                </div>
+                <div id="progress">Loading results/large_rome.json ...</div>
+            </div>
+        </div>
+    </body>
+</html>
+<!-- 
+hard coded vertex 3619 - 5005
+-->

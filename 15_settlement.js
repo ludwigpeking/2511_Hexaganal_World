@@ -202,7 +202,8 @@ function initializeSimulationValues() {
 
     // Build quadtree for spatial queries
     console.log("Building quadtree for spatial optimization...");
-    const boundary = { x: 0, y: 0, width: 2400, height: 2400 };
+    // Match the current canvas dimensions so all vertices are indexed
+    const boundary = { x: 0, y: 0, width: width, height: height };
     vertexQuadtree = new Quadtree(boundary, 4);
     vertices.forEach((v) => {
         // Insert all vertices into quadtree for inspector tool
@@ -342,12 +343,12 @@ function createLord() {
 
     // Filter habitable vertices to only central area
     const centralHabitable = habitable.filter(
-        (v) => v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY
+        (v) => v.x >= minX && v.x <= maxX && v.y >= minY && v.y <= maxY,
     );
 
     if (centralHabitable.length === 0) {
         console.warn(
-            "No habitable vertices in central area, using all habitable"
+            "No habitable vertices in central area, using all habitable",
         );
         centralHabitable.push(...habitable);
     }
@@ -372,7 +373,7 @@ function createLord() {
         castleVertex.defense,
         "position:",
         castleVertex.x.toFixed(0),
-        castleVertex.y.toFixed(0)
+        castleVertex.y.toFixed(0),
     );
 
     const lord = new Settlement(castleVertex, "Lord");
@@ -388,14 +389,14 @@ function createLord() {
         const path1 = pathFinding(
             castleVertex,
             tradeDestination1,
-            lord.trafficWeight
+            lord.trafficWeight,
         );
         if (path1) {
             const route1 = new Route(
                 castleVertex,
                 tradeDestination1,
                 lord.trafficWeight,
-                path1
+                path1,
             );
             routes.push(route1);
         }
@@ -404,14 +405,14 @@ function createLord() {
         const path2 = pathFinding(
             castleVertex,
             tradeDestination2,
-            lord.trafficWeight
+            lord.trafficWeight,
         );
         if (path2) {
             const route2 = new Route(
                 castleVertex,
                 tradeDestination2,
                 lord.trafficWeight,
-                path2
+                path2,
             );
             routes.push(route2);
         }
@@ -454,7 +455,7 @@ function createLord() {
                         // Check if farmer is in the flooded neighbors
                         const isInFloodedNeighbors =
                             affectedVertex.floodedNeighbors.some(
-                                (v) => v.index === s.vertex.index
+                                (v) => v.index === s.vertex.index,
                             );
                         if (isInFloodedNeighbors) {
                             farmerCount++;
@@ -487,14 +488,14 @@ function createFarmer() {
         const path = pathFinding(
             farmerVertex,
             castleVertices[0],
-            farmer.trafficWeight * 2
+            farmer.trafficWeight * 2,
         );
         if (path) {
             const route = new Route(
                 farmerVertex,
                 castleVertices[0],
                 farmer.trafficWeight * 2,
-                path
+                path,
             );
             routes.push(route);
         }
@@ -539,7 +540,7 @@ function createFarmer() {
                         // Check if farmer is in the flooded neighbors
                         const isInFloodedNeighbors =
                             affectedVertex.floodedNeighbors.some(
-                                (v) => v.index === s.vertex.index
+                                (v) => v.index === s.vertex.index,
                             );
                         if (isInFloodedNeighbors) {
                             farmerCount++;
@@ -571,14 +572,14 @@ function createMerchant() {
         const path1 = pathFinding(
             merchantVertex,
             tradeDestination1,
-            merchant.trafficWeight
+            merchant.trafficWeight,
         );
         if (path1) {
             const route1 = new Route(
                 merchantVertex,
                 tradeDestination1,
                 merchant.trafficWeight,
-                path1
+                path1,
             );
             routes.push(route1);
         }
@@ -587,14 +588,14 @@ function createMerchant() {
         const path2 = pathFinding(
             merchantVertex,
             tradeDestination2,
-            merchant.trafficWeight
+            merchant.trafficWeight,
         );
         if (path2) {
             const route2 = new Route(
                 merchantVertex,
                 tradeDestination2,
                 merchant.trafficWeight,
-                path2
+                path2,
             );
             routes.push(route2);
         }
@@ -603,14 +604,14 @@ function createMerchant() {
         const path3 = pathFinding(
             merchantVertex,
             castleVertices[0],
-            merchant.trafficWeight * 2
+            merchant.trafficWeight * 2,
         );
         if (path3) {
             const route3 = new Route(
                 merchantVertex,
                 castleVertices[0],
                 merchant.trafficWeight * 2,
-                path3
+                path3,
             );
             routes.push(route3);
         }
@@ -655,7 +656,7 @@ function createMerchant() {
                         // Check if farmer is in the flooded neighbors
                         const isInFloodedNeighbors =
                             affectedVertex.floodedNeighbors.some(
-                                (v) => v.index === s.vertex.index
+                                (v) => v.index === s.vertex.index,
                             );
                         if (isInFloodedNeighbors) {
                             farmerCount++;
@@ -733,7 +734,7 @@ function calculateFarmerValues() {
         // Calculate vicinity neighbors (smaller range)
         const vincinityVertices = findVerticesWithinMoveCost(
             vertex,
-            SHORT_RANGE
+            SHORT_RANGE,
         );
         vertex.vincinityNeighbors = vincinityVertices;
 
@@ -758,7 +759,7 @@ function calculateFarmerValues() {
                 if (s.profession === "Farmer") {
                     // Check if farmer is in the flooded neighbors
                     const isInFloodedNeighbors = nearbyVertices.some(
-                        (v) => v.index === s.vertex.index
+                        (v) => v.index === s.vertex.index,
                     );
                     if (isInFloodedNeighbors) {
                         farmerCount++;
@@ -787,7 +788,7 @@ function findVerticesWithinMoveCost(startVertex, maxMoveCost) {
         // Explore neighbors
         current.neighbors.forEach((neighbor) => {
             const neighborVertex = vertices.find(
-                (v) => v.index === neighbor.vertexIndex
+                (v) => v.index === neighbor.vertexIndex,
             );
             if (!neighborVertex) return;
 

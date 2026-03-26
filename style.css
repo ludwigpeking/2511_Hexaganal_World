@@ -98,6 +98,23 @@ body {
     align-items: center;
 }
 
+.sponsor-link {
+    padding: 8px 20px;
+    background-color: rgba(255, 105, 180, 0.3);
+    color: #f0e6d2;
+    text-decoration: none;
+    border: 1px solid rgba(255, 105, 180, 0.5);
+    border-radius: 6px;
+    font-family: Georgia, serif;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.sponsor-link:hover {
+    background-color: rgba(255, 105, 180, 0.5);
+    transform: translateY(-2px);
+}
+
 .city-selection {
     position: absolute;
     width: 100%;
@@ -241,16 +258,18 @@ canvas {
 .round-btn {
     position: fixed;
     right: 20px;
-    width: 50px;
-    height: 50px;
-    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
     border: 2px solid #333;
     border-radius: 50%;
     background-color: rgba(255, 255, 255, 0.9);
     cursor: pointer;
     z-index: 1001;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s, background-color 0.3s;
+    transition:
+        transform 0.2s,
+        background-color 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -265,20 +284,23 @@ canvas {
 }
 
 #homeBtn {
-    top: 20px;
-    background-color: rgba(33, 150, 243, 0.9);
+    top: 555px;
+    background-color: rgba(255, 152, 0, 0.9);
 }
 
 #homeBtn:hover {
-    background-color: rgba(25, 118, 210, 1);
+    background-color: rgba(245, 124, 0, 1);
 }
 
 #toggleDebugBtn {
-    top: 80px;
+    top: 615px;
 }
 
 #autoSimBtn {
-    top: 140px;
+    top: 20px;
+    width: 75px;
+    height: 75px;
+    font-size: 36px;
     background-color: rgba(76, 175, 80, 0.9);
 }
 
@@ -295,7 +317,7 @@ canvas {
 }
 
 #mouseModeRoad {
-    top: 200px;
+    top: 105px;
     background-color: rgba(158, 158, 158, 0.9);
 }
 
@@ -305,7 +327,7 @@ canvas {
 }
 
 #mouseModeCastle {
-    top: 260px;
+    top: 165px;
     background-color: rgba(156, 39, 176, 0.9);
 }
 
@@ -315,7 +337,7 @@ canvas {
 }
 
 #mouseModeFarmer {
-    top: 320px;
+    top: 225px;
     background-color: rgba(139, 195, 74, 0.9);
 }
 
@@ -325,7 +347,7 @@ canvas {
 }
 
 #mouseModeMerchant {
-    top: 380px;
+    top: 285px;
     background-color: rgba(255, 193, 7, 0.9);
 }
 
@@ -335,13 +357,31 @@ canvas {
 }
 
 #mouseModeDelete {
-    top: 440px;
+    top: 345px;
     background-color: rgba(244, 67, 54, 0.9);
 }
 
 #mouseModeDelete:hover,
 #mouseModeDelete.active {
     background-color: rgba(211, 47, 47, 1);
+}
+
+#saveBtn {
+    top: 435px;
+    background-color: rgba(33, 150, 243, 0.9);
+}
+
+#saveBtn:hover {
+    background-color: rgba(25, 118, 210, 1);
+}
+
+#loadBtn {
+    top: 495px;
+    background-color: rgba(156, 39, 176, 0.9);
+}
+
+#loadBtn:hover {
+    background-color: rgba(123, 31, 162, 1);
 }
 
 /* Left side layer panel */
@@ -351,7 +391,7 @@ canvas {
     top: 20px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     z-index: 1001;
 }
 
@@ -364,7 +404,9 @@ canvas {
     background-color: rgba(255, 255, 255, 0.7);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s, background-color 0.3s;
+    transition:
+        transform 0.2s,
+        background-color 0.3s;
     display: flex;
     align-items: center;
     justify-content: center;

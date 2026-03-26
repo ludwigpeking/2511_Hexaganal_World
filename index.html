@@ -1,10 +1,12 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
     <head>
         <meta charset="utf-8" />
         <title>World Simulator</title>
         <link rel="stylesheet" href="style.css" />
         <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/addons/p5.sound.min.js"></script>
+        <script src="assets/sounds/music.js"></script>
         <script src="11_utils.js"></script>
         <script src="12_vertex.js"></script>
         <script src="16_marchingSquares.js"></script>
@@ -13,6 +15,7 @@
         <script src="14_values.js"></script>
         <script src="17_presentation.js"></script>
         <script src="20_UI.js"></script>
+        <script src="21_saveLoad.js"></script>
         <script src="10_sketch.js"></script>
     </head>
     <body>
@@ -29,13 +32,13 @@
                     </button>
                 </div>
                 <div class="sponsor-button">
-                    <iframe
-                        src="https://github.com/sponsors/ludwigpeking/button"
-                        title="Sponsor ludwigpeking"
-                        height="32"
-                        width="114"
-                        style="border: 0; border-radius: 6px"
-                    ></iframe>
+                    <a
+                        href="https://github.com/sponsors/ludwigpeking"
+                        target="_blank"
+                        class="sponsor-link"
+                    >
+                        ❤️ Sponsor this project
+                    </a>
                 </div>
             </div>
             <div id="citySelection" class="city-selection hidden">
@@ -66,14 +69,25 @@
         <div id="canvas-container"></div>
 
         <!-- Right side control buttons -->
-        <button id="homeBtn">🏠</button>
-        <button id="toggleDebugBtn">⚙️</button>
         <button id="autoSimBtn">▶️</button>
+        <button id="recordVideoBtn">⏺️</button>
         <button id="mouseModeRoad">🛤️</button>
-        <button id="mouseModeCastle">🏰</button>
+        <button id="mouseModeCastle">🏯</button>
         <button id="mouseModeFarmer">👨‍🌾</button>
         <button id="mouseModeMerchant">🏪</button>
         <button id="mouseModeDelete">🗑️</button>
+        <button id="saveBtn">💾</button>
+        <button id="loadBtn">📂</button>
+        <button id="homeBtn">🏠</button>
+        <button id="toggleDebugBtn">⚙️</button>
+
+        <!-- Hidden file input for loading saved simulations -->
+        <input
+            type="file"
+            id="loadFileInput"
+            accept=".json"
+            style="display: none"
+        />
 
         <!-- Left side layer buttons -->
         <div id="left-panel">

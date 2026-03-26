@@ -1,3 +1,12 @@
+// Ensure bgMusic is available globally for music.js
+let bgMusic;
+
+function preload() {
+    if (typeof soundFormats === "function") soundFormats("mp3");
+    if (typeof loadSound === "function") {
+        bgMusic = loadSound("assets/sounds/PoncePreludioInEMajor.mp3");
+    }
+}
 //TODOs:
 // 1) moveCost reduction by traffic logic
 // 2) save/load map
@@ -23,7 +32,7 @@ let canvasScale = 1;
 let waterLevel = 10;
 let UnhabitableLevel = 120; // Elevation above which vertices cannot be settled
 let modeChangeCost = 50;
-let waterTransportFactor = 0.01;
+let waterTransportFactor = 0.1;
 let steepSlopes = []; // Array of {from: vertex, to: vertex} for debug visualization
 let selectedVertex = null; // For vertex inspection tool
 let canvasCreated = false; // Track if canvas has been created
@@ -62,7 +71,20 @@ const CLOUD_SCALE = 3; // scale factor for cloud image
 let isFirstAutoSpawn = true; // Track if first settlement has been spawned
 let autoSimulationActive = false; // Track if auto-simulation is running
 let autoSimFrameCounter = 0; // Count frames for spawning
-const AUTO_SIM_SPAWN_INTERVAL = 20; // Spawn every 20 frames
+const AUTO_SIM_SPAWN_INTERVAL =
+    typeof window.AUTO_SIM_SPAWN_INTERVAL === "number"
+        ? window.AUTO_SIM_SPAWN_INTERVAL
+        : 20; // Spawn every N frames
+const AUTO_SIM_SETTLEMENT_LIMIT =
+    typeof window.AUTO_SIM_SETTLEMENT_LIMIT === "number"
+        ? window.AUTO_SIM_SETTLEMENT_LIMIT
+        : 600; // Settlement limit
+
+// Video recording
+let isRecording = false; // Track if recording is active
+let recordedFrames = 0; // Count recorded frames
+const TARGET_FRAMES = 12000; // Total frames to record
+let frameCaptures = []; // Store frame data
 
 // Graphics buffers for performance
 let elevationBuffer = null;
@@ -79,6 +101,7 @@ let lastStaticState = {};
 async function setup() {
     // Load pattern atlas
     patternAtlas = await loadImage("assets/pattern_atlas.png");
+
     // console.log(
     //     "Pattern atlas loaded:",
     //     patternAtlas.width,
@@ -109,61 +132,104 @@ async function setup() {
     // Setup title screen event listeners
     setupTitleScreen();
 
+    // Auto-load fixed topo map if provided (used by index-large.html)
+    if (window.FORCE_TOPO_PATH) {
+        hideTitleScreen();
+        loadFixedTopo(window.FORCE_TOPO_PATH);
+    }
+
     // Apply tooltips from BUTTON_TIPS
     applyButtonTooltips();
+
+    // Initialize load simulation functionality
+    initializeLoadSimulation();
 
     // Canvas size is set in processData() after JSON is loaded
     // Keep loop running for cloud animation
     loop();
 
-    // Set up event listeners
-    select("#loadFileBtn").mousePressed(() => {
-        select("#fileInput").elt.click();
-    });
+    // Set up event listeners (guard elements that may not exist in index-large)
+    const loadFileBtn = select("#loadFileBtn");
+    const fileInput = select("#fileInput");
+    if (loadFileBtn && fileInput) {
+        loadFileBtn.mousePressed(() => {
+            fileInput.elt.click();
+        });
+        fileInput.elt.addEventListener("change", loadCustomFile);
+    }
 
-    select("#fileInput").elt.addEventListener("change", loadCustomFile);
-
-    select("#createRouteBtn").mousePressed(createRandomRoute);
-    select("#randomTravelBtn").mousePressed(createRandomTravel);
-    select("#clearRoutesBtn").mousePressed(clearRoutes);
-    select("#resetSimBtn").mousePressed(resetSimulation);
+    const createRouteBtn = select("#createRouteBtn");
+    if (createRouteBtn) createRouteBtn.mousePressed(createRandomRoute);
+    const randomTravelBtn = select("#randomTravelBtn");
+    if (randomTravelBtn) randomTravelBtn.mousePressed(createRandomTravel);
+    const clearRoutesBtn = select("#clearRoutesBtn");
+    if (clearRoutesBtn) clearRoutesBtn.mousePressed(clearRoutes);
+    const resetSimBtn = select("#resetSimBtn");
+    if (resetSimBtn) resetSimBtn.mousePressed(resetSimulation);
 
     // Setup left panel layer buttons
     setupLayerButtons();
 
-    select("#autoSimulate").changed(toggleAutoSimulation);
-    select("#setTerrainParamsBtn").mousePressed(updateTerrainParameters);
-    select("#setWaterLevelBtn").mousePressed(updateWaterLevel);
-    select("#setUnhabitableLevelBtn").mousePressed(updateUnhabitableLevel);
-    select("#toggleKinectBtn").mousePressed(toggleKinect);
+    const autoSimulateCheckbox = select("#autoSimulate");
+    if (autoSimulateCheckbox)
+        autoSimulateCheckbox.changed(toggleAutoSimulation);
+    const setTerrainParamsBtn = select("#setTerrainParamsBtn");
+    if (setTerrainParamsBtn)
+        setTerrainParamsBtn.mousePressed(updateTerrainParameters);
+    const setWaterLevelBtn = select("#setWaterLevelBtn");
+    if (setWaterLevelBtn) setWaterLevelBtn.mousePressed(updateWaterLevel);
+    const setUnhabitableLevelBtn = select("#setUnhabitableLevelBtn");
+    if (setUnhabitableLevelBtn)
+        setUnhabitableLevelBtn.mousePressed(updateUnhabitableLevel);
+    const toggleKinectBtn = select("#toggleKinectBtn");
+    if (toggleKinectBtn) toggleKinectBtn.mousePressed(toggleKinect);
 
-    // Home button - return to title screen
-    select("#homeBtn").mousePressed(() => {
-        returnToTitleScreen();
-    });
+    // Home button - return to title screen (may not exist in index-large)
+    const homeBtn = select("#homeBtn");
+    if (homeBtn) {
+        homeBtn.mousePressed(() => {
+            returnToTitleScreen();
+        });
+    }
 
     // Toggle debug panel button
-    select("#toggleDebugBtn").mousePressed(() => {
-        const panel = select("#right-panel");
-        if (panel.hasClass("hidden")) {
-            panel.removeClass("hidden");
-        } else {
-            panel.addClass("hidden");
-        }
+    const toggleDebugBtn = select("#toggleDebugBtn");
+    if (toggleDebugBtn) {
+        toggleDebugBtn.mousePressed(() => {
+            const panel = select("#right-panel");
+            if (panel && panel.hasClass("hidden")) {
+                panel.removeClass("hidden");
+            } else if (panel) {
+                panel.addClass("hidden");
+            }
+        });
+    }
+
+    // Apply round-btn class to all round buttons (guard for minimal UIs)
+    [
+        "#homeBtn",
+        "#toggleDebugBtn",
+        "#autoSimBtn",
+        "#recordVideoBtn",
+        "#mouseModeRoad",
+        "#mouseModeCastle",
+        "#mouseModeFarmer",
+        "#mouseModeMerchant",
+        "#mouseModeDelete",
+        "#saveBtn",
+        "#loadBtn",
+    ].forEach((selector) => {
+        const btn = select(selector);
+        if (btn) btn.addClass("round-btn");
     });
 
-    // Apply round-btn class to all round buttons
-    select("#homeBtn").addClass("round-btn");
-    select("#toggleDebugBtn").addClass("round-btn");
-    select("#autoSimBtn").addClass("round-btn");
-    select("#mouseModeRoad").addClass("round-btn");
-    select("#mouseModeCastle").addClass("round-btn");
-    select("#mouseModeFarmer").addClass("round-btn");
-    select("#mouseModeMerchant").addClass("round-btn");
-    select("#mouseModeDelete").addClass("round-btn");
-
     // Auto-simulation button
-    select("#autoSimBtn").mousePressed(toggleAutoSimulation);
+    const autoSimBtn = select("#autoSimBtn");
+    if (autoSimBtn) autoSimBtn.mousePressed(toggleAutoSimulation);
+
+    // Record video button
+    const recordVideoBtn = select("#recordVideoBtn");
+    if (recordVideoBtn) recordVideoBtn.mousePressed(startRecording);
 
     // Wire up mouse mode buttons (single click for toggle, double click for value-based placement)
     select("#mouseModeRoad").mousePressed(() => toggleMouseMode("road"));
@@ -178,10 +244,16 @@ async function setup() {
     setupDualClickButton(
         "#mouseModeMerchant",
         "merchant",
-        addMerchantSettlement
+        addMerchantSettlement,
     );
 
     select("#mouseModeDelete").mousePressed(() => toggleMouseMode("delete"));
+
+    // Save/Load buttons
+    select("#saveBtn").mousePressed(saveSimulation);
+    select("#loadBtn").mousePressed(() => {
+        select("#loadFileInput").elt.click();
+    });
 
     // Mouse play UI removed - using round buttons instead
     // initializeMousePlayUI();
@@ -216,7 +288,7 @@ function draw() {
             ) {
                 drawPresentationLayerToBuffer(
                     presentationBuffer,
-                    topoData.mapping.hexToCanvasScale
+                    topoData.mapping.hexToCanvasScale,
                 );
                 redraw();
             }
@@ -284,7 +356,12 @@ function draw() {
 
     background(0);
 
-    // Set up clipping region to hexagon boundary
+    // Draw sea background BEFORE clipping so it covers the full canvas
+    if (seaImage && showWater) {
+        image(seaImage, 0, 0, width, height);
+    }
+
+    // Set up clipping region to hexagon boundary (affects subsequent draws only)
     if (tiles && vertices) {
         drawingContext.save();
         drawingContext.beginPath();
@@ -295,7 +372,7 @@ function draw() {
         // Create clipping path from all tiles
         tiles.forEach((tile) => {
             const tileVertices = tile.vertexIndices.map((vIndex) =>
-                vertexMap.get(vIndex)
+                vertexMap.get(vIndex),
             );
             if (tileVertices.some((v) => !v)) return;
 
@@ -309,17 +386,10 @@ function draw() {
         drawingContext.clip();
     }
 
-    // Draw sea background image at 2x size (only if water layer is enabled)
-    if (seaImage && showWater) {
-        const seaWidth = seaImage.width * 2;
-        const seaHeight = seaImage.height * 2;
-        image(seaImage, 0, 0, seaWidth, seaHeight);
-    }
-
-    // Auto-simulation: spawn settlements every 5 frames
+    // Auto-simulation: spawn settlements every N frames
     if (autoSimulationActive) {
-        // Stop if reached 600 settlements or no habitable tiles
-        if (settlements.length >= 600) {
+        // Stop if reached settlement limit or no habitable tiles
+        if (settlements.length >= AUTO_SIM_SETTLEMENT_LIMIT) {
             autoSimulationActive = false;
             autoSimFrameCounter = 0;
             const btn = select("#autoSimBtn");
@@ -327,7 +397,9 @@ function draw() {
                 btn.removeClass("active");
                 btn.html("▶️ Auto Sim");
             }
-            updateProgress("Auto-simulation stopped: 600 settlements reached");
+            updateProgress(
+                `Auto-simulation stopped: ${AUTO_SIM_SETTLEMENT_LIMIT} settlements reached`,
+            );
         } else {
             autoSimFrameCounter++;
             if (autoSimFrameCounter >= AUTO_SIM_SPAWN_INTERVAL) {
@@ -346,7 +418,7 @@ function draw() {
                         btn.html("▶️ Auto Sim");
                     }
                     updateProgress(
-                        "Auto-simulation stopped: no habitable tiles available"
+                        "Auto-simulation stopped: no habitable tiles available",
                     );
                 }
             }
@@ -482,6 +554,11 @@ function draw() {
         }
     }
 
+    // Restore clipping region before UI overlays (inspector, hover)
+    if (tiles && vertices) {
+        drawingContext.restore();
+    }
+
     // Draw vertex inspector (always on top, always fresh)
     if (showVertexInspector && selectedVertex) {
         drawVertexInspector();
@@ -493,9 +570,46 @@ function draw() {
         drawHoveredVertexHighlight();
     }
 
-    // Restore clipping region
-    if (tiles && vertices) {
-        drawingContext.restore();
+    // Handle video recording
+    if (isRecording) {
+        recordedFrames++;
+
+        // Capture current frame
+        if (recordedFrames <= TARGET_FRAMES) {
+            // Save individual frame
+            saveCanvas(`frame_${nf(recordedFrames, 5)}`, "png");
+
+            // Update button text with progress
+            const btn = select("#recordVideoBtn");
+            if (btn) {
+                const progress = Math.floor(
+                    (recordedFrames / TARGET_FRAMES) * 100,
+                );
+                btn.html(`⏺️ ${progress}%`);
+            }
+        }
+
+        // Check if recording is complete
+        if (recordedFrames >= TARGET_FRAMES) {
+            isRecording = false;
+            autoSimulationActive = false;
+            recordedFrames = 0;
+
+            const btn = select("#recordVideoBtn");
+            if (btn) {
+                btn.removeClass("active");
+                btn.html("⏺️");
+            }
+
+            const autoBtn = select("#autoSimBtn");
+            if (autoBtn) {
+                autoBtn.removeClass("active");
+            }
+
+            alert(
+                `Recording complete! ${TARGET_FRAMES} frames saved.\\n\\nTo create video, run in terminal:\\nffmpeg -framerate 30 -i frame_%05d.png -c:v libx264 -pix_fmt yuv420p output.mp4`,
+            );
+        }
     }
 }
 
@@ -513,7 +627,7 @@ function createHexagonMask() {
     // Draw all tiles in one go without individual beginShape/endShape
     tiles.forEach((tile) => {
         const tileVertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (tileVertices.some((v) => !v)) return;
 
@@ -625,11 +739,50 @@ function setupTitleScreen() {
     const cityBackBtn = document.getElementById("cityBackBtn");
     const cityButtons = document.querySelectorAll(".city-btn-large");
 
+    // If the title screen elements are not present (e.g., index-large.html), skip setup
+    if (
+        !btnKinect ||
+        !btnAlteraCivitas ||
+        !homeContent ||
+        !citySelection ||
+        !cityBackBtn
+    ) {
+        return;
+    }
+
     btnKinect.addEventListener("click", () => {
+        if (
+            typeof bgMusic !== "undefined" &&
+            bgMusic &&
+            typeof bgMusic.isLoaded === "function" &&
+            bgMusic.isLoaded()
+        ) {
+            if (!bgMusic.isPlaying()) {
+                bgMusic.setLoop(true);
+                bgMusic.setVolume(0.5);
+                bgMusic.play();
+            }
+        } else if (typeof playBackgroundMusic === "function") {
+            playBackgroundMusic();
+        }
         startKinectMode();
     });
 
     btnAlteraCivitas.addEventListener("click", () => {
+        if (
+            typeof bgMusic !== "undefined" &&
+            bgMusic &&
+            typeof bgMusic.isLoaded === "function" &&
+            bgMusic.isLoaded()
+        ) {
+            if (!bgMusic.isPlaying()) {
+                bgMusic.setLoop(true);
+                bgMusic.setVolume(0.5);
+                bgMusic.play();
+            }
+        } else if (typeof playBackgroundMusic === "function") {
+            playBackgroundMusic();
+        }
         homeContent.classList.add("hidden");
         citySelection.classList.remove("hidden");
     });
@@ -649,6 +802,7 @@ function setupTitleScreen() {
 
 function hideTitleScreen() {
     const titleScreen = document.getElementById("titleScreen");
+    if (!titleScreen) return;
     titleScreen.classList.add("hidden");
 }
 
@@ -690,6 +844,8 @@ function resetSimulationState() {
 function returnToTitleScreen() {
     const titleScreen = document.getElementById("titleScreen");
     const citySelection = document.getElementById("citySelection");
+
+    if (!titleScreen || !citySelection) return;
 
     // Reset to home state
     appState = "TITLE";
@@ -790,6 +946,23 @@ async function loadDefaultMap() {
     }
 }
 
+// Load a fixed topo file path (used for large-canvas build)
+async function loadFixedTopo(path) {
+    updateProgress(`Loading ${path}...`);
+    try {
+        const response = await fetch(path);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const text = await response.text();
+        topoData = JSON.parse(text);
+        processData();
+    } catch (error) {
+        updateProgress(`Error loading file: ${error.message}`);
+        console.error(error);
+    }
+}
+
 async function loadCustomFile(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -818,7 +991,7 @@ async function toggleKinect() {
                 console.log("Hex map structure loaded for kinect mapping");
             } catch (error) {
                 updateProgress(
-                    "Error loading hex map structure: " + error.message
+                    "Error loading hex map structure: " + error.message,
                 );
                 kinectEnabled = false;
                 btn.html("Enable Kinect");
@@ -830,7 +1003,7 @@ async function toggleKinect() {
         updateProgress("Kinect mode enabled - polling started");
         kinectPollingInterval = setInterval(
             fetchKinectDepth,
-            KINECT_POLLING_RATE
+            KINECT_POLLING_RATE,
         );
         fetchKinectDepth(); // Initial fetch
     } else {
@@ -884,7 +1057,7 @@ async function fetchKinectDepth() {
         await processKinectDepthToTopo();
 
         updateProgress(
-            `Kinect update ${kinectUpdateCount} - ${new Date().toLocaleTimeString()}`
+            `Kinect update ${kinectUpdateCount} - ${new Date().toLocaleTimeString()}`,
         );
     } catch (error) {
         // console.error("Kinect fetch error:", error);
@@ -972,7 +1145,7 @@ async function processKinectDepthToTopo() {
         const gridCoords = hexToDepthGrid(
             vertex.x,
             vertex.y,
-            newTopoData.mapping.hexBounds
+            newTopoData.mapping.hexBounds,
         );
 
         // Interpolate depth (convert mm to meters by dividing by 1000)
@@ -1198,7 +1371,7 @@ function updateTerrainParameters() {
     const downhillFactor = parseFloat(select("#downhillFactor").value());
     const flatTerrainCost = parseFloat(select("#flatTerrainCost").value());
     updateProgress(
-        `Terrain parameters updated: Uphill=${uphillFactor}, Downhill=${downhillFactor}, Flat=${flatTerrainCost}`
+        `Terrain parameters updated: Uphill=${uphillFactor}, Downhill=${downhillFactor}, Flat=${flatTerrainCost}`,
     );
 }
 
@@ -1242,8 +1415,14 @@ function processData() {
     steepSlopes = [];
 
     // Create or resize canvas to fixed 1920x1080 resolution
-    const canvasWidth = 1920;
-    const canvasHeight = 1080;
+    const canvasWidth =
+        typeof window.LARGE_CANVAS_WIDTH === "number"
+            ? window.LARGE_CANVAS_WIDTH
+            : 1920;
+    const canvasHeight =
+        typeof window.LARGE_CANVAS_HEIGHT === "number"
+            ? window.LARGE_CANVAS_HEIGHT
+            : 1080;
 
     if (!canvasCreated) {
         // First time: create canvas in 2D mode (default)
@@ -1256,8 +1435,17 @@ function processData() {
         resizeCanvas(canvasWidth, canvasHeight);
     }
 
-    const scale = topoData.mapping.hexToCanvasScale;
-    const metersPerCanvasPixel = topoData.mapping.metersPerCanvasPixel;
+    // Scale up/down the original mapping to fit the new canvas while preserving aspect
+    const baseScale = topoData.mapping.hexToCanvasScale;
+    const widthRatio = canvasWidth / topoData.mapping.canvasWidth;
+    const heightRatio = canvasHeight / topoData.mapping.canvasHeight;
+    const scaleMultiplier = Math.min(widthRatio, heightRatio);
+    const scale = baseScale * scaleMultiplier;
+
+    // When pixels get denser, meters-per-pixel shrinks by the same multiplier
+    const metersPerCanvasPixel =
+        topoData.mapping.metersPerCanvasPixel / scaleMultiplier;
+
     const hexCenterX = topoData.mapping.hexCenter.x;
     const hexCenterY = topoData.mapping.hexCenter.y;
 
@@ -1267,7 +1455,7 @@ function processData() {
 
     // Create Vertex instances from raw data
     vertices = topoData.vertices.map(
-        (rawVertex) => new Vertex(rawVertex, scale, metersPerCanvasPixel)
+        (rawVertex) => new Vertex(rawVertex, scale, metersPerCanvasPixel),
     );
 
     // Apply centering offset to all vertices
@@ -1289,7 +1477,7 @@ function processData() {
             if (Math.abs(neighbor.slope) > 0.18) {
                 // Store for debug visualization
                 const neighborVertex = vertices.find(
-                    (v) => v.index === neighbor.vertexIndex
+                    (v) => v.index === neighbor.vertexIndex,
                 );
                 if (neighborVertex) {
                     steepSlopes.push({
@@ -1355,11 +1543,11 @@ function processData() {
             vertex.surroundingTiles.sort((a, b) => {
                 const angleA = atan2(
                     a.centerY - vertex.y,
-                    a.centerX - vertex.x
+                    a.centerX - vertex.x,
                 );
                 const angleB = atan2(
                     b.centerY - vertex.y,
-                    b.centerX - vertex.x
+                    b.centerX - vertex.x,
                 );
                 return angleA - angleB;
             });
@@ -1414,7 +1602,7 @@ function drawTilesWithElevation(scale) {
 
     topoData.tiles.forEach((tile) => {
         const vertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (vertices.some((v) => !v)) return;
 
@@ -1437,7 +1625,7 @@ function drawTilesWithElevation(scale) {
             minElevation,
             maxElevation,
             contourInterval,
-            waterLevel
+            waterLevel,
         );
     });
 }
@@ -1452,7 +1640,7 @@ function drawTileBorders(scale) {
 
     topoData.tiles.forEach((tile) => {
         const vertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (vertices.some((v) => !v)) return;
 
@@ -1508,7 +1696,7 @@ function drawRoutes(scale) {
         beginShape();
         for (let vertexIndex of route.path) {
             const v = topoData.vertices.find(
-                (vertex) => vertex.index === vertexIndex
+                (vertex) => vertex.index === vertexIndex,
             );
             vertex(v.x, v.y);
         }
@@ -1519,10 +1707,10 @@ function drawRoutes(scale) {
 function drawRouteEndpoints(scale) {
     routes.forEach((route) => {
         const startVertex = topoData.vertices.find(
-            (v) => v.index === route.start.index
+            (v) => v.index === route.start.index,
         );
         const endVertex = topoData.vertices.find(
-            (v) => v.index === route.end.index
+            (v) => v.index === route.end.index,
         );
 
         // Start point (green)
@@ -1558,7 +1746,7 @@ function drawSteepSlopes() {
             connection.from.x,
             connection.from.y,
             connection.to.x,
-            connection.to.y
+            connection.to.y,
         );
     });
 }
@@ -1735,7 +1923,7 @@ function drawVertexInspector() {
                 text(
                     info,
                     finalPanelX + 5,
-                    trafficPanelY + 5 + (i + 1) * lineHeight
+                    trafficPanelY + 5 + (i + 1) * lineHeight,
                 );
             });
         }
@@ -1747,7 +1935,9 @@ function updateProgress(message) {
 }
 
 function updateSimStats() {
-    select("#step-count").html(simulationStep.toString());
+    const stepEl = select("#step-count");
+    if (!stepEl) return; // Minimal UIs may omit the stats label
+    stepEl.html(simulationStep.toString());
 }
 
 function runSimulationStep() {
@@ -1792,6 +1982,50 @@ function toggleAutoSimulation() {
         autoSimulationActive = true;
         autoSimFrameCounter = 0;
         btn.addClass("active");
+    }
+}
+
+function startRecording() {
+    if (isRecording) {
+        // Stop recording
+        isRecording = false;
+        autoSimulationActive = false;
+        recordedFrames = 0;
+
+        const btn = select("#recordVideoBtn");
+        if (btn) {
+            btn.removeClass("active");
+            btn.html("⏺️");
+        }
+
+        const autoBtn = select("#autoSimBtn");
+        if (autoBtn) {
+            autoBtn.removeClass("active");
+        }
+    } else {
+        // Start recording
+        if (!topoData || !vertices || vertices.length === 0) {
+            alert("Please load a topology file first!");
+            return;
+        }
+
+        isRecording = true;
+        recordedFrames = 0;
+        autoSimulationActive = true; // Auto-start simulation
+        autoSimFrameCounter = 0;
+
+        const btn = select("#recordVideoBtn");
+        if (btn) {
+            btn.addClass("active");
+            btn.html("⏺️ 0%");
+        }
+
+        const autoBtn = select("#autoSimBtn");
+        if (autoBtn) {
+            autoBtn.addClass("active");
+        }
+
+        console.log(`Started recording ${TARGET_FRAMES} frames...`);
     }
 }
 
@@ -1885,7 +2119,7 @@ function drawTilesWithElevationToBuffer(buffer, scale) {
 
     topoData.tiles.forEach((tile) => {
         const vertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (vertices.some((v) => !v)) return;
 
@@ -1905,7 +2139,7 @@ function drawTilesWithElevationToBuffer(buffer, scale) {
             minElevation,
             maxElevation,
             contourInterval,
-            waterLevel
+            waterLevel,
         );
     });
 }
@@ -1926,7 +2160,7 @@ function drawPresentationLayerToBuffer(buffer, scale) {
 
     topoData.tiles.forEach((tile) => {
         const tileVertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (tileVertices.some((v) => !v)) return;
 
@@ -1951,7 +2185,7 @@ function drawPresentationLayerToBuffer(buffer, scale) {
             br,
             bl,
             uvs,
-            signature
+            signature,
         );
     });
 }
@@ -1965,7 +2199,7 @@ function drawTileBordersToBuffer(buffer, scale) {
 
     topoData.tiles.forEach((tile) => {
         const vertices = tile.vertexIndices.map((vIndex) =>
-            vertexMap.get(vIndex)
+            vertexMap.get(vIndex),
         );
         if (vertices.some((v) => !v)) return;
 
@@ -2071,7 +2305,7 @@ function drawRoutesToBuffer(buffer, scale) {
         buffer.beginShape();
         for (let vertexIndex of route.path) {
             const v = topoData.vertices.find(
-                (vertex) => vertex.index === vertexIndex
+                (vertex) => vertex.index === vertexIndex,
             );
             if (v) buffer.vertex(v.x, v.y);
         }
@@ -2247,7 +2481,7 @@ function drawFarmerValueLayerToBuffer(buffer) {
                 0,
                 sqrt(maxFarmerValue),
                 0,
-                120
+                120,
             );
             buffer.fill(hue, 100, 100, 0.5); // 50% opacity
             buffer.beginShape();
@@ -2384,27 +2618,28 @@ function drawSlopeDirectionLayerToBuffer(buffer) {
         if (vtx.slopeDirection !== null && vtx.slopeDirectionMagnitude > 0.01) {
             const arrowLength =
                 10 * Math.min(vtx.slopeDirectionMagnitude / 0.1, 2);
-            const endX = vtx.x + Math.cos(vtx.slopeDirection) * arrowLength;
-            const endY = vtx.y + Math.sin(vtx.slopeDirection) * arrowLength;
+            const reversedDirection = vtx.slopeDirection + Math.PI; // Reverse direction
+            const endX = vtx.x + Math.cos(reversedDirection) * arrowLength;
+            const endY = vtx.y + Math.sin(reversedDirection) * arrowLength;
 
             // Draw arrow line
             buffer.line(vtx.x, vtx.y, endX, endY);
 
             // Draw arrowhead
             const arrowHeadSize = 3;
-            const angle1 = vtx.slopeDirection + Math.PI * 0.75;
-            const angle2 = vtx.slopeDirection - Math.PI * 0.75;
+            const angle1 = reversedDirection + Math.PI * 0.75;
+            const angle2 = reversedDirection - Math.PI * 0.75;
             buffer.line(
                 endX,
                 endY,
                 endX + Math.cos(angle1) * arrowHeadSize,
-                endY + Math.sin(angle1) * arrowHeadSize
+                endY + Math.sin(angle1) * arrowHeadSize,
             );
             buffer.line(
                 endX,
                 endY,
                 endX + Math.cos(angle2) * arrowHeadSize,
-                endY + Math.sin(angle2) * arrowHeadSize
+                endY + Math.sin(angle2) * arrowHeadSize,
             );
         }
     });

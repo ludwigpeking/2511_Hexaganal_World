@@ -1,4 +1,6 @@
 // UI State
+const CANVAS_WIDTH = 1920;
+const CANVAS_HEIGHT = 1080;
 let currentScreen = "menu"; // 'menu', 'generating', 'result'
 let generatedMap = null;
 
@@ -26,7 +28,8 @@ let averageEdgeLength = 0;
 let averageFaceArea = 0;
 
 function setup() {
-    createCanvas(800, 800);
+    createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+    pixelDensity(1); // Keep export size consistent with on-screen size
     setupUI();
     showMenu();
 }
@@ -248,6 +251,20 @@ function generateMap() {
         // Apply relaxation using area-weighted centroids
         vertices.forEach((vertex) => {
             relaxVertexPosition(vertex, params.relaxationStrength);
+        });
+        faces.forEach((face) => {
+            let area = calculateFaceArea(face);
+            let diff = (area - averageFaceArea) / averageFaceArea;
+            let center = getFaceCentroid(face);
+
+            // If face is too big (diff > 0), pull vertices in.
+            // If face is too small (diff < 0), push vertices out.
+            face.vertices.forEach((v) => {
+                if (!v.edgy) {
+                    v.x += (center.x - v.x) * diff * 0.01; // Tiny strength
+                    v.y += (center.y - v.y) * diff * 0.01;
+                }
+            });
         });
     } // Build the final map data structure
     generatedMap = buildMapData();
@@ -633,38 +650,38 @@ function precalculateAdjacentFaces() {
 }
 
 function relaxVertexPosition(vertex, strength = 0.1) {
+    // 1. Maintain Boundary: Skip 'edgy' vertices to keep the hexagon shape
     if (
         vertex.edgy ||
         !vertex.adjacentFaces ||
         vertex.adjacentFaces.length === 0
-    )
+    ) {
         return;
+    }
 
-    let weightedSumX = 0;
-    let weightedSumY = 0;
-    let totalWeight = 0;
+    let targetX = 0;
+    let targetY = 0;
+    let count = vertex.adjacentFaces.length;
 
-    // Calculate the weighted centroid based on the area of adjacent faces
+    // 2. The "Squareness" Force: Average of adjacent centroids
+    // This pulls the vertex to a position that balances the space
+    // between all four (or more) surrounding quads.
     vertex.adjacentFaces.forEach((face) => {
         let centroid = getFaceCentroid(face);
-        let weight = face.area;
-
-        weightedSumX += centroid.x * weight;
-        weightedSumY += centroid.y * weight;
-        totalWeight += weight;
+        targetX += centroid.x;
+        targetY += centroid.y;
     });
 
-    if (totalWeight > 0) {
-        // Calculate the average position based on the weighted centroid
-        let avgX = weightedSumX / totalWeight;
-        let avgY = weightedSumY / totalWeight;
+    // Calculate the arithmetic mean
+    targetX /= count;
+    targetY /= count;
 
-        // Apply the adjustment with specified strength
-        vertex.x += (avgX - vertex.x) * strength;
-        vertex.y += (avgY - vertex.y) * strength;
-    }
+    // 3. Update Position
+    // Moving toward the average of face centers naturally
+    // drives internal angles toward 90 degrees.
+    vertex.x += (targetX - vertex.x) * strength;
+    vertex.y += (targetY - vertex.y) * strength;
 }
-
 function calculateAverageEdgeLength() {
     let totalLength = 0;
     let edgeCount = 0;
