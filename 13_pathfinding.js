@@ -14,6 +14,7 @@ class Route {
 }
 
 function pathFinding(start, end, trafficWeight) {
+    const __t0 = profStart();
     // Reset all vertices
     topoData.vertices.forEach((v) => {
         v.g = Infinity;
@@ -47,9 +48,7 @@ function pathFinding(start, end, trafficWeight) {
         closeSet.push(current);
 
         for (let neighborData of current.neighbors) {
-            const neighbor = topoData.vertices.find(
-                (v) => v.index === neighborData.vertexIndex,
-            );
+            const neighbor = vertexByIndex.get(neighborData.vertexIndex);
             if (!neighbor) continue;
             if (closeSet.includes(neighbor)) continue;
 
@@ -115,9 +114,7 @@ function pathFinding(start, end, trafficWeight) {
         // Third pass: add traffic to neighbors (only once per neighbor per route)
         const neighborTrafficAdded = new Set();
         pathVertices.forEach((pathIndex) => {
-            const pathVertex = topoData.vertices.find(
-                (v) => v.index === pathIndex,
-            );
+            const pathVertex = vertexByIndex.get(pathIndex);
             if (pathVertex) {
                 pathVertex.neighbors.forEach((neighborData) => {
                     const neighborIndex = neighborData.vertexIndex;
@@ -126,9 +123,7 @@ function pathFinding(start, end, trafficWeight) {
                         !pathVertices.has(neighborIndex) &&
                         !neighborTrafficAdded.has(neighborIndex)
                     ) {
-                        const neighbor = topoData.vertices.find(
-                            (v) => v.index === neighborIndex,
-                        );
+                        const neighbor = vertexByIndex.get(neighborIndex);
                         if (neighbor) {
                             neighbor.traffic += trafficWeight * 0.5; // Neighbors get half the traffic
                             neighbor.trafficValue = neighbor.traffic; // Update traffic value for merchant calculations
@@ -143,12 +138,8 @@ function pathFinding(start, end, trafficWeight) {
         for (let i = 0; i < path.length - 1; i++) {
             const currentIndex = path[i];
             const nextIndex = path[i + 1];
-            const currentVertex = topoData.vertices.find(
-                (v) => v.index === currentIndex,
-            );
-            const nextVertex = topoData.vertices.find(
-                (v) => v.index === nextIndex,
-            );
+            const currentVertex = vertexByIndex.get(currentIndex);
+            const nextVertex = vertexByIndex.get(nextIndex);
 
             if (currentVertex && nextVertex) {
                 // Increment trafficCount on the edge from current to next
@@ -204,15 +195,13 @@ function pathFinding(start, end, trafficWeight) {
             presentationBuffer &&
             patternAtlas
         ) {
-            const vertexMap = new Map();
-            topoData.vertices.forEach((v) => vertexMap.set(v.index, v));
             updatedVertices.forEach((vertex) => {
                 redrawVertexQuads(
                     presentationBuffer,
                     patternAtlas,
                     vertex,
                     topoData.tiles,
-                    vertexMap,
+                    vertexByIndex,
                 );
             });
         }
@@ -220,9 +209,11 @@ function pathFinding(start, end, trafficWeight) {
         // Recalculate movement costs to apply traffic reduction
         calculateMovementCosts();
 
+        profEnd("pathFinding", __t0);
         return path;
     }
 
+    profEnd("pathFinding", __t0);
     return null;
 }
 
@@ -237,12 +228,8 @@ function calculateRouteStats(route) {
     route.totalElevationGain = 0;
 
     for (let i = 0; i < route.path.length - 1; i++) {
-        const currentVertex = topoData.vertices.find(
-            (v) => v.index === route.path[i],
-        );
-        const nextVertex = topoData.vertices.find(
-            (v) => v.index === route.path[i + 1],
-        );
+        const currentVertex = vertexByIndex.get(route.path[i]);
+        const nextVertex = vertexByIndex.get(route.path[i + 1]);
         const neighborData = currentVertex.neighbors.find(
             (n) => n.vertexIndex === nextVertex.index,
         );
@@ -349,8 +336,8 @@ function createRandomTravel() {
 function createHardcodedRoute(startIndex, endIndex) {
     if (!topoData) return;
 
-    const start = topoData.vertices.find((v) => v.index === startIndex);
-    const end = topoData.vertices.find((v) => v.index === endIndex);
+    const start = vertexByIndex.get(startIndex);
+    const end = vertexByIndex.get(endIndex);
 
     if (!start || !end) {
         // console.error(`Could not find vertices ${startIndex} or ${endIndex}`);

@@ -20,6 +20,44 @@ let appState = "TITLE"; // TITLE, KINECT, STATIC_MAP
 let currentCity = null; // Store selected city name
 let topoData = null;
 let vertices = [];
+let vertexByIndex = new Map(); // index -> Vertex; rebuilt whenever `vertices` is reassigned
+
+// ---- Lightweight profiler ----
+// Set PROFILE = false to disable. Wraps key sim/draw functions; dumps a
+// console.table every PROFILE_DUMP_INTERVAL frames showing total/avg ms per
+// function over that window, then clears.
+const PROFILE = true;
+const PROFILE_DUMP_INTERVAL = 60;
+const profStats = new Map(); // name -> { count, totalMs }
+function profStart() {
+    return PROFILE ? performance.now() : 0;
+}
+function profEnd(name, t0) {
+    if (!PROFILE) return;
+    const dt = performance.now() - t0;
+    let e = profStats.get(name);
+    if (!e) {
+        e = { count: 0, totalMs: 0 };
+        profStats.set(name, e);
+    }
+    e.count++;
+    e.totalMs += dt;
+}
+function profDump() {
+    if (!PROFILE || profStats.size === 0) return;
+    const rows = [];
+    for (const [name, e] of profStats) {
+        rows.push({
+            name,
+            calls: e.count,
+            totalMs: +e.totalMs.toFixed(1),
+            avgMs: +(e.totalMs / e.count).toFixed(3),
+        });
+    }
+    rows.sort((a, b) => b.totalMs - a.totalMs);
+    console.table(rows);
+    profStats.clear();
+}
 let tiles = [];
 let minElevation = 0;
 let maxElevation = 0;
@@ -264,6 +302,8 @@ function draw() {
         background(0);
         return;
     }
+
+    const __drawT0 = profStart();
 
     // Initialize buffers if needed
     if (!elevationBuffer) {
@@ -611,6 +651,9 @@ function draw() {
             );
         }
     }
+
+    profEnd("draw", __drawT0);
+    if (PROFILE && frameCount % PROFILE_DUMP_INTERVAL === 0) profDump();
 }
 
 function createHexagonMask() {
@@ -637,6 +680,24 @@ function createHexagonMask() {
         });
         seaMaskGraphics.endShape(CLOSE);
     });
+}
+
+// Surgically redraw the presentation tiles around a list of vertices whose
+// occupiedBy/castleAnnex/occupiedByRoute state just changed. Cheap compared
+// to a full updatePresentationLayer() rebuild.
+function redrawPresentationForVertices(verticesToRedraw) {
+    if (!presentationBuffer || !patternAtlas || !topoData) return;
+    if (typeof redrawVertexQuads !== "function") return;
+    for (const v of verticesToRedraw) {
+        if (!v) continue;
+        redrawVertexQuads(
+            presentationBuffer,
+            patternAtlas,
+            v,
+            topoData.tiles,
+            vertexByIndex,
+        );
+    }
 }
 
 function invalidateBuffers(which = "all") {
@@ -870,6 +931,7 @@ function returnToTitleScreen() {
     // Clear the canvas
     topoData = null;
     vertices = [];
+    vertexByIndex = new Map();
     tiles = [];
 
     // Reset water level to default
@@ -911,10 +973,10 @@ async function loadCityMap(city) {
         const cityFiles = {
             hongkong: "map/hongkong/hongkong_topo.json",
             tokyo: "map/tokyo/topo_small.json",
-            rome: "results/topo_4_lowRes.json",
+            rome: "results/topos/topo_4_lowRes.json",
         };
 
-        const filePath = cityFiles[city] || "results/topo_4_lowRes.json";
+        const filePath = cityFiles[city] || "results/topos/topo_4_lowRes.json";
         const response = await fetch(filePath);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -933,7 +995,7 @@ async function loadCityMap(city) {
 async function loadDefaultMap() {
     updateProgress("Loading default map...");
     try {
-        const response = await fetch("results/topo_4_lowRes.json");
+        const response = await fetch("results/topos/topo_4_lowRes.json");
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -986,7 +1048,7 @@ async function toggleKinect() {
         // Load hex map structure if not already loaded
         if (!hexMapData) {
             try {
-                const response = await fetch("results/map_4_small.json");
+                const response = await fetch("results/grids/map_4_small.json");
                 hexMapData = await response.json();
                 console.log("Hex map structure loaded for kinect mapping");
             } catch (error) {
@@ -1467,6 +1529,10 @@ function processData() {
     // Update topoData.vertices reference to point to new Vertex instances
     topoData.vertices = vertices;
 
+    // Build index map for O(1) vertex lookups by index
+    vertexByIndex = new Map();
+    vertices.forEach((v) => vertexByIndex.set(v.index, v));
+
     tiles = topoData.tiles;
 
     // Filter out too-steep slopes and store for debug visualization
@@ -1476,9 +1542,7 @@ function processData() {
             // Check if slope is too steep (> 18%)
             if (Math.abs(neighbor.slope) > 0.18) {
                 // Store for debug visualization
-                const neighborVertex = vertices.find(
-                    (v) => v.index === neighbor.vertexIndex,
-                );
+                const neighborVertex = vertexByIndex.get(neighbor.vertexIndex);
                 if (neighborVertex) {
                     steepSlopes.push({
                         from: vertex,
@@ -1526,7 +1590,7 @@ function processData() {
     // Store surrounding tile centers for each vertex
     topoData.tiles.forEach((tile) => {
         tile.vertexIndices.forEach((vIndex) => {
-            const vertex = topoData.vertices.find((v) => v.index === vIndex);
+            const vertex = vertexByIndex.get(vIndex);
             if (vertex && tile.centerX && tile.centerY) {
                 vertex.surroundingTiles.push({
                     centerX: tile.centerX,
@@ -1695,9 +1759,7 @@ function drawRoutes(scale) {
 
         beginShape();
         for (let vertexIndex of route.path) {
-            const v = topoData.vertices.find(
-                (vertex) => vertex.index === vertexIndex,
-            );
+            const v = vertexByIndex.get(vertexIndex);
             vertex(v.x, v.y);
         }
         endShape();
@@ -1706,12 +1768,8 @@ function drawRoutes(scale) {
 
 function drawRouteEndpoints(scale) {
     routes.forEach((route) => {
-        const startVertex = topoData.vertices.find(
-            (v) => v.index === route.start.index,
-        );
-        const endVertex = topoData.vertices.find(
-            (v) => v.index === route.end.index,
-        );
+        const startVertex = vertexByIndex.get(route.start.index);
+        const endVertex = vertexByIndex.get(route.end.index);
 
         // Start point (green)
         fill(0, 255, 0);
@@ -1946,6 +2004,7 @@ function runSimulationStep() {
         return;
     }
 
+    const __t0 = profStart();
     simulationStep++;
     updateSimStats();
 
@@ -1969,6 +2028,7 @@ function runSimulationStep() {
     }
 
     updateProgress(`Simulation step ${simulationStep} completed`);
+    profEnd("runSimulationStep", __t0);
 }
 
 function toggleAutoSimulation() {
@@ -2064,7 +2124,16 @@ function addLordSettlement() {
     updateProgress(`Lord created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
-    invalidateBuffers("presentation");
+    // Surgically refresh presentation tiles around the new lord and its
+    // castle annexes (their getVertexSymbol output just changed).
+    const lord = settlements[settlements.length - 1];
+    if (lord && lord.profession === "Lord") {
+        const dirty = [lord.vertex];
+        if (lord.vertex.vincinityNeighbors) {
+            dirty.push(...lord.vertex.vincinityNeighbors);
+        }
+        redrawPresentationForVertices(dirty);
+    }
     redraw();
 }
 
@@ -2086,7 +2155,12 @@ function addFarmerSettlement() {
     updateProgress(`Farmer created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
-    invalidateBuffers("presentation");
+    // Surgically refresh the new farmer's tile (gardens don't change tile
+    // signature - only occupiedBy / castleAnnex / occupiedByRoute do).
+    const farmer = settlements[settlements.length - 1];
+    if (farmer && farmer.profession === "Farmer") {
+        redrawPresentationForVertices([farmer.vertex]);
+    }
     redraw();
 }
 
@@ -2108,7 +2182,11 @@ function addMerchantSettlement() {
     updateProgress(`Merchant created at step ${simulationStep}`);
     invalidateBuffers("debug");
     invalidateBuffers("static");
-    invalidateBuffers("presentation");
+    // Surgically refresh the new merchant's tile.
+    const merchant = settlements[settlements.length - 1];
+    if (merchant && merchant.profession === "Merchant") {
+        redrawPresentationForVertices([merchant.vertex]);
+    }
     redraw();
 }
 
@@ -2304,9 +2382,7 @@ function drawRoutesToBuffer(buffer, scale) {
 
         buffer.beginShape();
         for (let vertexIndex of route.path) {
-            const v = topoData.vertices.find(
-                (vertex) => vertex.index === vertexIndex,
-            );
+            const v = vertexByIndex.get(vertexIndex);
             if (v) buffer.vertex(v.x, v.y);
         }
         buffer.endShape();

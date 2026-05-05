@@ -36,7 +36,7 @@ async function loadAndMap() {
 
     try {
         // Load hexagonal map JSON
-        const hexResponse = await fetch("results/map_4_small.json");
+        const hexResponse = await fetch("results/grids/map_4_small.json");
         hexMapData = await hexResponse.json();
 
         updateProgress("Calculating coordinate mapping...");

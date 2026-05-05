@@ -158,9 +158,7 @@ class Vertex {
                 validNeighbors++;
 
                 // Calculate slope direction (gradient vector)
-                const neighborVertex = vertices.find(
-                    (v) => v.index === neighbor.vertexIndex
-                );
+                const neighborVertex = vertexByIndex.get(neighbor.vertexIndex);
                 if (neighborVertex) {
                     const dx = neighborVertex.x - this.x;
                     const dy = neighborVertex.y - this.y;
@@ -195,10 +193,8 @@ class Vertex {
                 neighbor.trafficCount = 0;
             }
 
-            // Get neighbor vertex (need to find it from global vertices array)
-            const neighborVertex = vertices.find(
-                (v) => v.index === neighbor.vertexIndex
-            );
+            // Get neighbor vertex via index map (O(1))
+            const neighborVertex = vertexByIndex.get(neighbor.vertexIndex);
             if (!neighborVertex) return;
 
             const fromWater = this.water;

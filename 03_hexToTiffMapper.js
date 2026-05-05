@@ -62,7 +62,7 @@ async function loadAndMap(hexMapFile = null, tiffFile = null) {
             const text = await hexMapFile.text();
             hexMapData = JSON.parse(text);
         } else {
-            const hexResponse = await fetch("results/map_4_small.json");
+            const hexResponse = await fetch("results/grids/map_4_small.json");
             hexMapData = await hexResponse.json();
         }
 
@@ -583,5 +583,5 @@ document.addEventListener("DOMContentLoaded", () => {
     canvas = document.getElementById("mapCanvas");
     ctx = canvas.getContext("2d");
     // Uncomment to auto-load with default files:
-    // loadAndMap(); // Uses hardcoded paths: results/map_4_small.json and map/rome/output_hh.tif
+    // loadAndMap(); // Uses hardcoded paths: results/grids/map_4_small.json and map/rome/output_hh.tif
 });

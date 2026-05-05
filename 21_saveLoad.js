@@ -176,6 +176,7 @@ async function restoreSimulation(saveData) {
     settlementNr = 0;
     castleVertices = [];
     habitable = [];
+    farmerVertexIndices = new Set();
     routes = [];
     travelers = [];
     isFirstAutoSpawn = true;
@@ -203,6 +204,10 @@ async function restoreSimulation(saveData) {
         return vertex;
     });
 
+    // Build index map for O(1) vertex lookups by index
+    vertexByIndex = new Map();
+    vertices.forEach((v) => vertexByIndex.set(v.index, v));
+
     // Reconstruct tiles from saved topoData
     tiles = saveData.topoData.tiles.map((t) => ({ ...t }));
 
@@ -229,9 +234,7 @@ async function restoreSimulation(saveData) {
     // Restore settlements
     if (saveData.settlements && saveData.settlements.length > 0) {
         saveData.settlements.forEach((savedSettlement) => {
-            const vertex = vertices.find(
-                (v) => v.index === savedSettlement.vertexIndex
-            );
+            const vertex = vertexByIndex.get(savedSettlement.vertexIndex);
             if (!vertex) return;
 
             const settlement = new Settlement(
@@ -259,22 +262,18 @@ async function restoreSimulation(saveData) {
 
     // Restore trade destinations
     if (saveData.tradeDestination1 !== null) {
-        tradeDestination1 = vertices.find(
-            (v) => v.index === saveData.tradeDestination1
-        );
+        tradeDestination1 = vertexByIndex.get(saveData.tradeDestination1);
     }
     if (saveData.tradeDestination2 !== null) {
-        tradeDestination2 = vertices.find(
-            (v) => v.index === saveData.tradeDestination2
-        );
+        tradeDestination2 = vertexByIndex.get(saveData.tradeDestination2);
     }
 
     // Restore routes
     if (saveData.routes && saveData.routes.length > 0) {
         console.log(`Restoring ${saveData.routes.length} routes`);
         routes = saveData.routes.map((savedRoute) => {
-            const start = vertices.find((v) => v.index === savedRoute.start);
-            const end = vertices.find((v) => v.index === savedRoute.end);
+            const start = vertexByIndex.get(savedRoute.start);
+            const end = vertexByIndex.get(savedRoute.end);
             if (!start || !end) {
                 console.warn(
                     `Could not find vertices for route: start=${savedRoute.start}, end=${savedRoute.end}`
@@ -299,7 +298,7 @@ async function restoreSimulation(saveData) {
                 return;
             }
             route.path.forEach((vertexIndex, i) => {
-                const vertex = vertices.find((v) => v.index === vertexIndex);
+                const vertex = vertexByIndex.get(vertexIndex);
                 if (vertex) {
                     vertex.traffic += route.trafficWeight;
 
